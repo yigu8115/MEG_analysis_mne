@@ -6,37 +6,58 @@ Created on Sun Mar 27 15:05:12 2022
 @author: mq20096022
 """
 #######################################################################################
-# I ran the following in terminal. Should be able to use OS or mne functions though
 
-# export FREESURFER_HOME=/Applications/freesurfer
-# source $FREESURFER_HOME/SetUpFreeSurfer.sh
-# export SUBJECTS_DIR=/Users/mq20096022/Documents/xxxxx
-
-# my_subject=p0001
-# my_NIfTI=/Users/mq20096022/Documents/xxxxx_T1mprage_xxxxx.nii
-# recon-all -i $my_NIfTI -s $my_subject -all
-
-# mne make_scalp_surfaces --overwrite --subject p0001 --subjects-dir /Users/mq20096022/Documents/xxxxx --force
-# mne setup_forward_model --homog --surf --ico 4
-# mne watershed_bem --subject=p0001 --subjects-dir=/Users/mq20096022/Documents/xxxxx
-
-# Also need to make the -trans.fiff by doing co-reg
-# mne.gui.coregistration() always gives some issues with pyvista and vtk and the versions of python/mne
-
-# this resource by Christian Brodbeck is very useful:
+# This resource by Christian Brodbeck is very useful:
 # https://github.com/christianbrodbeck/Eelbrain/wiki/MNE-Pipeline
 # https://github.com/christianbrodbeck/Eelbrain/wiki/Coregistration:-Structural-MRI
 # etc.
+
+'''
+#Q: I ran the following in terminal. Should be able to use OS or mne functions though
+
+#A: Can put these in .bashrc, so they will be executed on startup (is there an equivalent file for Mac?)
+# https://surfer.nmr.mgh.harvard.edu/fswiki/FS7_wsl_ubuntu
+# (best not to be part of the script, as diff computers will have diff paths)
+export FREESURFER_HOME=/Applications/freesurfer
+source $FREESURFER_HOME/SetUpFreeSurfer.sh
+
+# The other OS commands below can be run from within python script using the following: 
+#import os
+#os.system('your command here')
+
+
+export SUBJECTS_DIR=/home/jzhu/analysis_mne/processing/mri/ # a number of mne functions will use this to determine path (could also pass in each time explicitly, to avoid the need to rely on env var?)
+# output from recon-all will also be stored here (each subject will have their own subfolder)
+
+my_subject=FTD0185_MEG1441 # a new folder with this name will be created inside $SUBJECTS_DIR, to contain the output from recon-all
+my_nifti=/home/jzhu/analysis_mne/RawData/$my_subject/anat/FTD0185_T1a.nii # specify the input T1 scan
+recon-all -i $my_nifti -s $my_subject -all
+
+mne make_scalp_surfaces --overwrite -s $my_subject -d $SUBJECTS_DIR --force
+mne watershed_bem -s $my_subject -d $SUBJECTS_DIR
+mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
+'''
+
+
+#NOTE: all plots will close when the script finishes running.
+# In order to keep the figures open, use -i option when running:
+# python3 -i ~/my_GH/MEG_analysis_mne/Source_analysis.py
 
 import mne
 
 import os.path as op
 import numpy as np
 
-subject = "xxxxx"
-subjects_dir = "/Users/mq20096022/Documents/xxxxx/Subjects"
-trans = "/Users/mq20096022/Documents/Data/ME202/Subjects/xxxxx/meg/0002_BH_ME152_18022022_rest_B1-trans.fif"
-raw = "/Users/mq20096022/Documents/Data/ME202/Subjects/xxxxx/meg/0002_BH_ME152_18022022_rest_B1-raw.fif"
+#subject = "xxxxx"
+#subjects_dir = "/Users/mq20096022/Documents/xxxxx/Subjects"
+#trans = "/Users/mq20096022/Documents/Data/ME202/Subjects/xxxxx/meg/0002_BH_ME152_18022022_rest_B1-trans.fif"
+#raw = "/Users/mq20096022/Documents/Data/ME202/Subjects/xxxxx/meg/0002_BH_ME152_18022022_rest_B1-raw.fif"
+exp_dir = "/home/jzhu/analysis_mne/processing/"
+subjects_dir = exp_dir + "mri/"
+subject = "FTD0185_MEG1441"
+trans = exp_dir + "meg/" + subject + "/" + subject + "-trans.fif"
+raw = exp_dir + "meg/" + subject + "/" + subject + "-raw.fif"
+
 
 plot_bem_kwargs = dict(
     subject=subject,
@@ -48,7 +69,17 @@ plot_bem_kwargs = dict(
 
 mne.viz.plot_bem(**plot_bem_kwargs)
 
+
+# make the -trans.fif by doing coreg
+mne.viz.set_3d_options(antialias=0) # disable anti-aliasing to fix rendering issue
+mne.gui.coregistration()
+#mne coreg -d subjects_dir
+#Q: this always gives some issues with pyvista and vtk and the versions of python/mne
+#A: just install the missing packages as prompted (traitlets, pyvista, pyvistaqt, pyqt5).
+#   Also disable anti-aliasing if head model not rendering (see above)
+
 info = mne.io.read_info(raw)
+
 # Here we look at the dense head, which isn't used for BEM computations but
 # is useful for coregistration.
 mne.viz.plot_alignment(
