@@ -45,10 +45,13 @@ mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
 # In order to keep the figures open, use -i option when running, e.g.
 # python3 -i ~/my_GH/MEG_analysis_mne/Source_analysis.py
 
-import mne
-
 import os.path as op
 import numpy as np
+import matplotlib.pyplot as plt
+
+import mne
+from mne.beamformer import make_lcmv, apply_lcmv
+
 
 # set up file and folder paths
 exp_dir = "/home/jzhu/analysis_mne/processing/"
@@ -56,8 +59,14 @@ subjects_dir = exp_dir + "mri/"
 subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
 subject_MEG = '220112_p003' #'FTD0185_MEG1441'
 meg_task = '_1_oddball' #''
-raw_fname = exp_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task + "-raw.fif"
-trans_fname = exp_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task + "-trans.fif"
+
+base_fname = exp_dir + "meg/" + subject_MEG + "/" + subject_MEG
+raw_fname = base_fname + meg_task + "-raw.fif"
+trans_fname = base_fname + meg_task + "-trans.fif"
+epochs_fname = base_fname + meg_task + "-epo.fif"
+fwd_fname = base_fname + "-fwd.fif"
+filters_fname = base_fname + meg_task + "-filters-lcmv.h5"
+filters_vec_fname = base_fname + meg_task + "-filters_vec-lcmv.h5"
 
 # adjust mne options to fix rendering issue (not needed in Windows)
 mne.viz.set_3d_options(antialias = 0, depth_peeling = 0) 
@@ -80,6 +89,7 @@ mne.viz.plot_bem(**plot_bem_kwargs) # plot bem
 
 
 # ===== Coregistration ===== #
+
 # Coregister MRI with headshape from MEG digitisation 
 # (embedded in .fif file, whereas for KIT data we have a separate .hsp file)
 
@@ -123,42 +133,61 @@ print(
 
 # ===== Compute source space ===== #
 
-# source space based on surface (by selecting a subset of vertices at specified spacing)
-spacing = "oct6" # 'oct#' - use a recursively subdivided octahedron
-src = mne.setup_source_space(
-    subject, spacing=spacing, add_dist="patch", subjects_dir=subjects_dir
-)
-# save to mri folder
-mne.write_source_spaces(
-    op.join(subjects_dir, subject, "bem", subject_MEG + "_" + spacing + ".fif"), src
-)
+# Note: beamformers are usually computed in a volume source space (3rd option below), 
+# because estimating only cortical surface activation can misrepresent the data
+# https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html#the-forward-model
+
+# create source space from cortical surface (by selecting a subset of vertices)
+'''
+spacing = "oct4" # use a recursively subdivided octahedron: 4 for speed, 6 for real analyses
+src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + spacing + "-src.fif")
+if op.exists(src_fname):
+    src = mne.read_source_spaces(src_fname)
+else:
+    src = mne.setup_source_space(
+        subject, spacing=spacing, add_dist="patch", subjects_dir=subjects_dir
+    )
+    # save to mri folder
+    mne.write_source_spaces(
+        src_fname, src
+    )
+    
 print(src)
 mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source points
-
-# try some other options
 '''
-# volume source space with grid spacing (based on a sphere)
+
+# create volume source space using grid spacing (in a sphere)
+'''
 sphere = (0, 0.0, 0.0, 0.09)
-vol_src = mne.setup_volume_source_space(
+src = mne.setup_volume_source_space(
     subject,
     subjects_dir=subjects_dir,
     sphere=sphere,
     sphere_units="m",
-    add_interpolator=False,
-)  # rough for speed!
-print(vol_src)
+    add_interpolator=False,  # just for speed!
+)
 
-mne.viz.plot_bem(src=vol_src, **plot_bem_kwargs) # plot bem with source grid
-
-# volume source space with grid spacing (based on bem)
-surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
-vol_src = mne.setup_volume_source_space(
-    subject, subjects_dir=subjects_dir, surface=surface, add_interpolator=False
-)  # rough for speed
-print(vol_src)
-
-mne.viz.plot_bem(src=vol_src, **plot_bem_kwargs) # plot bem with source grid
+print(src)
+mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
 '''
+
+# create volume source space using grid spacing (bounded by the bem)
+src_fname = op.join(subjects_dir, subject, "bem", subject + "_vol-src.fif")
+if op.exists(src_fname):
+    src = mne.read_source_spaces(src_fname)
+else:
+    surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
+    src = mne.setup_volume_source_space(
+        subject, subjects_dir=subjects_dir, surface=surface, add_interpolator=True
+    )
+    # save to mri folder
+    mne.write_source_spaces(
+        src_fname, src
+    )
+    
+print(src)
+mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
+
 
 # check alignment after creating source space
 fig = mne.viz.plot_alignment(
@@ -179,25 +208,43 @@ mne.viz.set_3d_view(
 
 # ===== Compute forward solution / leadfield ===== #
 
-conductivity = (0.3,)  # single layer: inner skull (good enough for MEG but not EEG)
-# conductivity = (0.3, 0.006, 0.3)  # three layers (use this for EEG)
-model = mne.make_bem_model( # BEM model describes the head geometry & conductivities of diff tissues
-    subject=subject, ico=4, conductivity=conductivity, subjects_dir=subjects_dir
-)
-bem = mne.make_bem_solution(model)
+if op.exists(fwd_fname):
+    fwd = mne.read_forward_solution(fwd_fname)
+else:
+    conductivity = (0.3,)  # single layer: inner skull (good enough for MEG but not EEG)
+    # conductivity = (0.3, 0.006, 0.3)  # three layers (use this for EEG)
+    model = mne.make_bem_model( # BEM model describes the head geometry & conductivities of diff tissues
+        subject=subject, ico=4, conductivity=conductivity, subjects_dir=subjects_dir
+    )
+    bem = mne.make_bem_solution(model)
 
-fwd = mne.make_forward_solution(
-    raw_fname,
-    trans=trans,
-    src=src,
-    bem=bem,
-    meg=True,
-    eeg=False,
-    mindist=5.0,
-    n_jobs=1,
-    verbose=True,
-)
+    fwd = mne.make_forward_solution(
+        raw_fname,
+        trans=trans,
+        src=src,
+        bem=bem,
+        meg=True,
+        eeg=False,
+        mindist=5.0,
+        n_jobs=1,
+        verbose=True,
+    )
+    # save a copy
+    mne.write_forward_solution(fwd_fname, fwd)
+    
 print(fwd)
+
+# apply source orientation constraint (e.g. fixed orientation)
+# note: not applicable to volumetric source space
+'''
+fwd = mne.convert_forward_solution(
+    fwd, surf_ori=True, force_fixed=True, use_cps=True
+)
+'''
+
+# we can explore the content of fwd to access the numpy array that contains the leadfield matrix
+leadfield = fwd["sol"]["data"]
+print("Leadfield size (free orientation): %d sensors x %d dipoles" % leadfield.shape)
 
 # Forward computation can remove vertices that are too close to (or outside) the inner skull surface,
 # so always use fwd["src"] (rather than just src) when passing to other functions.
@@ -205,17 +252,54 @@ print(fwd)
 print(f'Before: {src}')
 print(f'After:  {fwd["src"]}')
 
-# we can explore the content of fwd to access the numpy array that contains the leadfield matrix
-leadfield = fwd["sol"]["data"]
-print("Leadfield size (free orientation): %d sensors x %d dipoles" % leadfield.shape)
-
-# apply source orientation constraint (e.g. fixed orientation)
-fwd_fixed = mne.convert_forward_solution(
-    fwd, surf_ori=True, force_fixed=True, use_cps=True
-)
-leadfield = fwd_fixed["sol"]["data"]
-print("Leadfield size (fixed orientation): %d sensors x %d dipoles" % leadfield.shape)
+# save a bit of memory
+src = fwd["src"]
+#del fwd
 
 
 # ===== Reconstruct source activity in A1 ===== #
 
+# Tutorial:
+# https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
+
+# Run sensor-space analysis script to obtain the epochs (or read from saved file)
+epochs = mne.read_epochs(epochs_fname)
+evoked = epochs.average()
+#evoked.plot_joint() # average ERF across all conds
+
+# compute cov matrices
+data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.5,
+                                  method='empirical')
+noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
+                                   method='empirical')
+#data_cov.plot(epochs.info)
+#del epochs
+
+# compute the spatial filter (LCMV beamformer)
+filters = make_lcmv(evoked.info, fwd, data_cov, reg=0.05,
+                    noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
+                    weight_norm='unit-noise-gain', rank=None)
+filters_vec = make_lcmv(evoked.info, fwd, data_cov, reg=0.05,
+                        noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
+                        weight_norm='unit-noise-gain', rank=None)
+# save the filters for later
+filters.save(filters_fname)
+filters_vec.save(filters_vec_fname)
+
+# apply the spatial filter
+stc = apply_lcmv(evoked, filters)
+stc_vec = apply_lcmv(evoked, filters_vec)
+#del filters, filters_vec
+
+# plot the reconstructed source activity
+lims = [0.3, 0.45, 0.6]
+kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir,
+              initial_time=0.087, verbose=True)
+brain = stc_vec.plot_3d(
+    clim=dict(kind='value', lims=lims), hemi='both', size=(600, 600),
+    #views=['sagittal'], # only show sag view
+    view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+    brain_kwargs=dict(silhouette=True),
+    **kwargs)
+    
+# Q: how do we choose an ROI, i.e. get source activity for A1 only?
