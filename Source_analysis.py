@@ -264,8 +264,13 @@ src = fwd["src"]
 
 # Run sensor-space analysis script to obtain the epochs (or read from saved file)
 epochs = mne.read_epochs(epochs_fname)
-evoked = epochs.average()
-#evoked.plot_joint() # average ERF across all conds
+evoked_allconds = epochs.average()
+#evoked_allconds.plot_joint() # average ERF across all conds
+
+# compute evoked for each cond
+evokeds = []
+for cond in epochs.event_id:
+    evokeds.append(epochs[cond].average())
 
 # compute cov matrices
 data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.5,
@@ -275,31 +280,39 @@ noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
 #data_cov.plot(epochs.info)
 #del epochs
 
-# compute the spatial filter (LCMV beamformer)
-filters = make_lcmv(evoked.info, fwd, data_cov, reg=0.05,
+# compute the spatial filter (LCMV beamformer) - use common filter for all conds?
+filters = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
                     noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
                     weight_norm='unit-noise-gain', rank=None)
-filters_vec = make_lcmv(evoked.info, fwd, data_cov, reg=0.05,
+filters_vec = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
                         noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
                         weight_norm='unit-noise-gain', rank=None)
 # save the filters for later
-filters.save(filters_fname)
-filters_vec.save(filters_vec_fname)
+filters.save(filters_fname, overwrite=True)
+filters_vec.save(filters_vec_fname, overwrite=True)
 
 # apply the spatial filter
-stc = apply_lcmv(evoked, filters)
-stc_vec = apply_lcmv(evoked, filters_vec)
-#del filters, filters_vec
-
-# plot the reconstructed source activity
-lims = [0.3, 0.45, 0.6]
-kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir,
-              initial_time=0.087, verbose=True)
-brain = stc_vec.plot_3d(
-    clim=dict(kind='value', lims=lims), hemi='both', size=(600, 600),
-    #views=['sagittal'], # only show sag view
-    view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
-    brain_kwargs=dict(silhouette=True),
-    **kwargs)
+stcs = dict()
+stcs_vec = dict()
+for index, evoked in enumerate(evokeds):
+    cond = evoked.comment
+    stcs[cond] = apply_lcmv(evoked, filters)
+    stcs_vec[cond] = apply_lcmv(evoked, filters_vec)
     
-# Q: how do we choose an ROI, i.e. get source activity for A1 only?
+    # plot the reconstructed source activity
+    lims = [0.3, 0.45, 0.6] # set colour scale
+    kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir,
+                  initial_time=0.087, verbose=True)
+    brain = stcs_vec[cond].plot_3d(
+        clim=dict(kind='value', lims=lims), hemi='both', size=(600, 600),
+        #views=['sagittal'], # only show sag view
+        view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+        brain_kwargs=dict(silhouette=True),
+        **kwargs)
+
+# Q: 
+# 1. How do we choose an ROI, i.e. get source activity for A1 only? 
+#    (need to apply the label from freesurfer to work out which vertices belong to A1?)
+# 2. How to compare stcs between 2 conds? atm I'm just plotting each of them separately ...
+#
+# https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html
