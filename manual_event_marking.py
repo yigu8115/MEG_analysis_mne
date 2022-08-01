@@ -7,6 +7,9 @@ data_dir = 'C:/Users/mq43606024/Downloads/epilepsy_MEG/'
 raw_fname = data_dir + '0001_JC_ME200_11022022_resting_B1_TSPCA-raw.fif'
 raw = mne.io.read_raw_fif(raw_fname, verbose=False)
 
+# filter the data
+raw.filter(l_freq=1, h_freq=None)
+
 # browse data to mark the events manually
 fig = raw.plot(start=0) #, duration=6)
 #fig.fake_keypress('a') # press 'a' to toggle annotations mode
