@@ -1,13 +1,18 @@
 import os
 import mne
 
-# load raw data
+# set up paths
 data_dir = '/home/jzhu/epilepsy_MEG/'
 raw_fname = data_dir + '0001_JC_ME200_11022022_resting_B1_TSPCA-raw.fif'
+mri_dir = data_dir + 'p0001/'
+fname_bem = mri_dir + 'bem/p0001-5120-bem-sol.fif' # obtained with: mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
+fname_trans = data_dir + '0001_JC_ME200_11022022-trans.fif' # obtained with: mne coreg (GUI)
+
+# load raw data
 raw = mne.io.read_raw_fif(raw_fname, verbose=False)
 
 # filter the data
-#raw.filter(l_freq=1, h_freq=None)
+raw.filter(l_freq=1, h_freq=80)
 
 # read spikes from csv file
 my_annot = mne.read_annotations(data_dir + 'saved-annotations-for_Judy_1Aug22.csv')
@@ -36,8 +41,24 @@ print(events_from_annot)
 
 # epoching based on events
 epochs = mne.Epochs(
-    raw, events_from_annot, event_id=event_dict, tmin=-0.1, tmax=0.5, preload=True
+    raw, events_from_annot, event_id=event_dict, tmin=-0.1, tmax=0.6, preload=True
 )
+
+# average the epochs
+evoked_polysw = epochs['polysw'].average()
+evoked_sw_post = epochs['sw_post'].average()
+evoked_sw_post.crop(tmin=-0.1, tmax=0.37) # crop based on average length of manually marked spikes in this cateogory
+
+# compute noise covariance matrix
+cov_polysw = mne.compute_covariance(epochs['polysw'])
 
 # source localisation
 
+# method 1: fit a dipole
+# https://mne.tools/stable/auto_tutorials/inverse/20_dipole_fit.html
+dip = mne.fit_dipole(evoked_polysw, cov_polysw, fname_bem, fname_trans)[0]
+dip.save(data_dir + 'polysw.dip')
+
+# Plot the result in 3D brain with the MRI image.
+#dip = mne.read_dipole(data_dir + 'polysw.dip')
+dip.plot_locations(fname_trans, '0001', data_dir, mode='orthoview')
