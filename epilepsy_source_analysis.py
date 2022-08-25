@@ -2,7 +2,7 @@ import os
 import mne
 
 # set up paths
-data_dir = '/home/jzhu/epilepsy_MEG/'
+data_dir = 'C:/Users/mq43606024/Downloads/epilepsy_MEG/'
 raw_fname = data_dir + '0001_JC_ME200_11022022_resting_B1_TSPCA-raw.fif'
 mri_dir = data_dir + 'p0001/'
 fname_bem = mri_dir + 'bem/p0001-5120-bem-sol.fif' # obtained with: mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
@@ -51,6 +51,7 @@ evoked_sw_post.crop(tmin=-0.1, tmax=0.37) # crop based on average length of manu
 
 # compute noise covariance matrix
 cov_polysw = mne.compute_covariance(epochs['polysw'])
+cov_sw_post = mne.compute_covariance(epochs['sw_post'])
 
 # source localisation
 
@@ -58,7 +59,18 @@ cov_polysw = mne.compute_covariance(epochs['polysw'])
 # https://mne.tools/stable/auto_tutorials/inverse/20_dipole_fit.html
 dip = mne.fit_dipole(evoked_polysw, cov_polysw, fname_bem, fname_trans)[0]
 dip.save(data_dir + 'polysw.dip')
+dip_sw_post = mne.fit_dipole(evoked_sw_post, cov_sw_post, fname_bem, fname_trans)[0]
+dip_sw_post.save(data_dir + 'sw_post.dip')
 
-# Plot the result in 3D brain with the MRI image.
+# Plot the result in 3D brain using individual T1
 #dip = mne.read_dipole(data_dir + 'polysw.dip')
-dip.plot_locations(fname_trans, '0001', data_dir, mode='orthoview')
+dip.plot_locations(fname_trans, 'p0001', data_dir, mode='orthoview')
+#dip_sw_post = mne.read_dipole(data_dir + 'sw_post.dip')
+dip_sw_post.plot_locations(fname_trans, 'p0001', data_dir, mode='orthoview')
+
+fig = mne.viz.plot_alignment(
+    subject='p0001',
+    subjects_dir=data_dir,
+    surfaces="white",
+    coord_frame="mri"
+)
