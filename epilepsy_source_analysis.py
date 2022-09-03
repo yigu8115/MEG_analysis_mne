@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import os.path as op
 import numpy as np
+import copy
 
 import mne
 from mne.minimum_norm import make_inverse_operator, apply_inverse
@@ -59,7 +60,7 @@ print(events_from_annot)
 # https://mne.tools/dev/auto_tutorials/intro/20_events_from_raw.html#the-events-and-annotations-data-structures
 
 
-
+'''
 ### Prepare for source analysis ###
 
 # epoching based on events
@@ -182,7 +183,7 @@ stc, residual = apply_inverse(evoked_sw_post, inverse_operator, lambda2,
 # plot the results:
 # https://mne.tools/stable/auto_tutorials/inverse/30_mne_dspm_loreta.html#visualization
 
-
+'''
 
 # Method 3: kurtosis beamformer
 
@@ -209,6 +210,12 @@ for i in reversed(too_close): # do in reversed order as indices will change afte
 epochs = mne.Epochs(
     raw, events_sw_post, event_id={cond: cond_id}, tmin=-30, tmax=30, preload=True
 )
+# downsample to 100Hz, otherwise stc will be too large 
+# (browsed data to check - spikes are still pretty obvious)
+epochs.resample(100) 
+# this step is done here as it's better not to epoch after downsampling:
+# https://mne.tools/stable/generated/mne.io.Raw.html#mne.io.Raw.resample
+
 # average the epochs
 evoked = epochs[cond].average()
 #evoked.save(op.join(results_dir, subject_MEG + '_' + cond + '-ave.fif'))
@@ -220,14 +227,10 @@ data_cov = mne.compute_covariance(epochs) # use the whole epochs
 # compute noise cov from empty room data
 # https://mne.tools/dev/auto_tutorials/forward/90_compute_covariance.html
 raw_empty_room = mne.io.read_raw_kit(raw_emptyroom_fname)
-'''
-raw_empty_room.info['bads'] = [
-    bb for bb in raw.info['bads'] if 'EEG' not in bb]
-raw_empty_room.add_proj(
-    [pp.copy() for pp in raw.info['projs'] if 'EEG' not in pp['desc']])
-'''
+raw_empty_room.resample(100) # just to be consistent (not sure if required)
 noise_cov = mne.compute_raw_covariance(
     raw_empty_room, tmin=0, tmax=None)
+
 
 # LCMV beamformer
 # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
@@ -254,21 +257,39 @@ stcs = dict()
 stcs[cond] = apply_lcmv(evoked, filters)
 
 # plot the reconstructed source activity
+# (Memory intensive - cannot run if we didn't downsample from 1000Hz)
+'''
 lims = [0.3, 0.45, 0.6] # set colour scale
-kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir,
-                initial_time=0.087, verbose=True)
-brain = stcs[cond].plot_3d(   # Memory intensive - cannot run in WSL2 even with 12GB memory allocation
-    clim=dict(kind='value', lims=lims), hemi='both', size=(600, 600),
+kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True)
+brain = stcs[cond].plot_3d(   
+    #clim=dict(kind='value', lims=lims), 
+    hemi='both', size=(600, 600),
     #views=['sagittal'], # only show sag view
     view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
     brain_kwargs=dict(silhouette=True),
     **kwargs)
+'''
 
 
-# compute kurtosis for each virtual sensor
-univariate.compute_kurtosis(stcs[cond])
+# compute kurtosis for each vertex
+kurtosis = univariate.compute_kurtosis(stcs[cond].data)
 
 #selected_funcs = ['kurtosis']
 #('fe', FeatureExtractor(sfreq=sfreq, selected_funcs=selected_funcs))
 
-# find the virtual sensor (or cluster of virtual sensors) with maximum kurtosis
+# find the vertex (or cluster of vertices) with maximum kurtosis
+print(np.max(kurtosis))
+VS_list = np.where(kurtosis > 3.7) 
+# note: Rui's paper uses all the local maxima on the kurtosis map, we are just using an absolute cutoff here
+
+# TODO: how do I know where these vertices are? check src - how to read out the coordinates for each vertex?
+# we can plot the kurtosis value for each vertex on the source model - but this looks weird!
+tmp = copy.copy(stcs[cond]) # make a fake stc by copying the structure
+tmp.data = kurtosis.reshape(-1,1) # convert 1d array to 2d
+kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True)
+tmp.plot_3d(   
+    #hemi='both', size=(600, 600),
+    #views=['sagittal'], # only show sag view
+    view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+    brain_kwargs=dict(silhouette=True),
+    **kwargs)
