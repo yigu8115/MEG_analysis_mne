@@ -22,18 +22,16 @@ raw_fname = op.join(path_MEG, subject_MEG) + meg_task + '-raw.fif'
 raw_emptyroom_fname = op.join(path_MEG, subject_MEG) + '_emptyroom.con'
 fname_bem = op.join(subjects_dir, subject, 'bem', 'p0001-5120-bem-sol.fif') # obtained with: mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
 fname_trans = op.join(path_MEG, subject_MEG) + "-trans.fif" # obtained with: mne coreg (GUI)
+fname_src = op.join(subjects_dir, subject, "bem", subject + "_vol-src.fif") # volumetric source model - can use for both minimum norm & beamformer
 fname_fwd = op.join(results_dir, subject_MEG) + "-fwd.fif"
 fname_filters = op.join(results_dir, subject_MEG) + meg_task + "-filters-lcmv.h5"
 fname_annot = op.join(path_MEG, 'saved-annotations-for_Judy_1Aug22.csv')
 
 
-# NOTE: filtering requires preload of raw data
-# preloading & filtering need 12GB memory allocation for WSL (if "Killed", you need to allocate more)
-
 # load raw data
-raw = mne.io.read_raw_fif(raw_fname, verbose=False, preload=True)
+raw = mne.io.read_raw_fif(raw_fname, verbose=False, preload=True) # filtering requires preload of raw data
 
-# filter the data
+# filtering 1hr recording needs 12GB memory allocation for WSL (if "Killed", you need to allocate more)
 #raw.filter(l_freq=1, h_freq=80)
 raw.filter(l_freq=3, h_freq=70) # use this for kurtosis beamformer (see Rui's paper)
 
@@ -60,7 +58,7 @@ print(events_from_annot)
 # https://mne.tools/dev/auto_tutorials/intro/20_events_from_raw.html#the-events-and-annotations-data-structures
 
 
-'''
+
 ### Prepare for source analysis ###
 
 # epoching based on events
@@ -97,9 +95,8 @@ dip_sw_post.plot_locations(fname_trans, subject, subjects_dir, mode='orthoview')
 # Prep for Methods 2 & 3 - create source space & forward model
 
 # create source space
-src_fname = op.join(subjects_dir, subject, "bem", subject + "_vol-src.fif")
-if op.exists(src_fname):
-    src = mne.read_source_spaces(src_fname)
+if op.exists(fname_src):
+    src = mne.read_source_spaces(fname_src)
 else:
     surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
     src = mne.setup_volume_source_space(
@@ -107,7 +104,7 @@ else:
     )
     # save to mri folder
     mne.write_source_spaces(
-        src_fname, src
+        fname_src, src
     )
 print(src)
 
@@ -170,24 +167,32 @@ print(fwd)
 # https://mne.tools/stable/auto_tutorials/inverse/30_mne_dspm_loreta.html#inverse-modeling-mne-dspm-on-evoked-and-raw-data
 
 # compute inverse solution
-inverse_operator = make_inverse_operator(
-    evoked_sw_post.info, fwd, cov_sw_post, loose=0.2, depth=0.8)
+inv = make_inverse_operator(
+    evoked_sw_post.info, fwd, cov_sw_post, loose='auto', depth=0.8)
 
 method = "MNE" # “dSPM” | “sLORETA” | “eLORETA”
 snr = 3.
 lambda2 = 1. / snr ** 2
-stc, residual = apply_inverse(evoked_sw_post, inverse_operator, lambda2,
+stc, residual = apply_inverse(evoked_sw_post, inv, lambda2,
                               method=method, pick_ori=None,
                               return_residual=True, verbose=True)    
+stc.save(results_dir + '/sw_post')
 
 # plot the results:
-# https://mne.tools/stable/auto_tutorials/inverse/30_mne_dspm_loreta.html#visualization
+# https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html#volume-source-estimates
+stc = mne.read_source_estimate(results_dir + '/sw_post')
+src = mne.read_source_spaces(fname_src)
+stc.plot(src=src, subject=subject, subjects_dir=subjects_dir, initial_time=0.053,
+    #clim=dict(kind='percent', lims=[90, 95, 99]),
+    #view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+    #brain_kwargs=dict(silhouette=True)
+    )
+# use plot_3d() for interactive
+stc.plot(src, subject=subject, subjects_dir=subjects_dir, mode='glass_brain')
 
-'''
 
 # Method 3: kurtosis beamformer
-
-# take 1-min segment around each manually marked spike, ensure there's no overlap
+# use 1-min segment around each manually marked spike, ensure there's no overlap
 
 # select a particular condition
 cond = 'sw_post'
@@ -210,11 +215,12 @@ for i in reversed(too_close): # do in reversed order as indices will change afte
 epochs = mne.Epochs(
     raw, events_sw_post, event_id={cond: cond_id}, tmin=-30, tmax=30, preload=True
 )
-# downsample to 100Hz, otherwise stc will be too large 
-# (browsed data to check - spikes are still pretty obvious)
-epochs.resample(100) 
+# downsample to 250Hz, otherwise stc will be too large (due to very long epochs)
+# (checked on raw data - spikes are still pretty obvious after downsampling)
+epochs.decimate(4) 
 # this step is done here as it's better not to epoch after downsampling:
 # https://mne.tools/stable/generated/mne.io.Raw.html#mne.io.Raw.resample
+# https://mne.tools/stable/auto_tutorials/preprocessing/30_filtering_resampling.html#best-practices
 
 # average the epochs
 evoked = epochs[cond].average()
@@ -227,7 +233,8 @@ data_cov = mne.compute_covariance(epochs) # use the whole epochs
 # compute noise cov from empty room data
 # https://mne.tools/dev/auto_tutorials/forward/90_compute_covariance.html
 raw_empty_room = mne.io.read_raw_kit(raw_emptyroom_fname)
-raw_empty_room.resample(100) # just to be consistent (not sure if required)
+raw_empty_room.filter(l_freq=3, h_freq=70) # just to be consistent (not sure if required)
+raw_empty_room.decimate(4) # just to be consistent (not sure if required)
 noise_cov = mne.compute_raw_covariance(
     raw_empty_room, tmin=0, tmax=None)
 
@@ -246,7 +253,7 @@ else:
         noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
         weight_norm='unit-noise-gain', rank=None)
     # save the filters for later
-    filters.save(fname_filters)
+    filters.save(fname_filters, overwrite=True)
 
 # save some memory
 del raw, raw_empty_room, epochs, fwd
@@ -257,7 +264,7 @@ stcs = dict()
 stcs[cond] = apply_lcmv(evoked, filters)
 
 # plot the reconstructed source activity
-# (Memory intensive - cannot run if we didn't downsample from 1000Hz)
+# (Memory intensive due to 1-min epochs - cannot run if we didn't downsample from 1000Hz)
 '''
 lims = [0.3, 0.45, 0.6] # set colour scale
 kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True)
@@ -274,22 +281,26 @@ brain = stcs[cond].plot_3d(
 # compute kurtosis for each vertex
 kurtosis = univariate.compute_kurtosis(stcs[cond].data)
 
-#selected_funcs = ['kurtosis']
-#('fe', FeatureExtractor(sfreq=sfreq, selected_funcs=selected_funcs))
+# plot the kurtosis value for each vertex on the source model
+tmp = copy.copy(stcs[cond]) # make a fake stc by copying the structure
+tmp.data = kurtosis.reshape(-1,1) # convert 1d array to 2d
+kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True)
+tmp.plot_3d(   
+    clim=dict(kind='value', lims=[2.9, 3.3, 3.6]),
+    #clim=dict(kind='percent', lims=[90, 95, 99]),
+    smoothing_steps=7,
+    #hemi='both', size=(600, 600),
+    #views=['sagittal'], # only show sag view
+    view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+    brain_kwargs=dict(silhouette=True),
+    **kwargs)
 
 # find the vertex (or cluster of vertices) with maximum kurtosis
 print(np.max(kurtosis))
 VS_list = np.where(kurtosis > 3.7) 
 # note: Rui's paper uses all the local maxima on the kurtosis map, we are just using an absolute cutoff here
 
-# TODO: how do I know where these vertices are? check src - how to read out the coordinates for each vertex?
-# we can plot the kurtosis value for each vertex on the source model - but this looks weird!
-tmp = copy.copy(stcs[cond]) # make a fake stc by copying the structure
-tmp.data = kurtosis.reshape(-1,1) # convert 1d array to 2d
-kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True)
-tmp.plot_3d(   
-    #hemi='both', size=(600, 600),
-    #views=['sagittal'], # only show sag view
-    view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
-    brain_kwargs=dict(silhouette=True),
-    **kwargs)
+# TODO: now we should visually inspect the stc for each of these vertices
+# to see if the timing of spikes match the ones marked in raw data
+
+# And then how should we proceed? read Rui paper again ...
