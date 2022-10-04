@@ -313,6 +313,13 @@ for index, evoked in enumerate(evokeds):
 # Q: 
 # 1. How do we choose an ROI, i.e. get source activity for A1 only? 
 #    (need to apply the label from freesurfer to work out which vertices belong to A1?)
+# https://mne.tools/stable/auto_examples/inverse/label_source_activations.html
+# See also: https://mne.tools/stable/auto_examples/visualization/parcellation.html
+# 
 # 2. How to compare stcs between 2 conds? atm I'm just plotting each of them separately ...
 #
+# Compare evoked response across conds (can do the same to compare stcs?)
+# https://mne.tools/stable/auto_examples/visualization/topo_compare_conditions.html
+#
+# Plotting stcs:
 # https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html
