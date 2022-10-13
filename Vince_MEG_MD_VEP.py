@@ -28,7 +28,7 @@ def main():
     MEG_dir = "C:/sync/OneDrive - Macquarie University/Studies/19_MicrodosingResearch/MEG_Microdosing/data/ACQUISITION/220401_30112_S1/"
     #MEG_dir = "C:/Users/mq43606024/Desktop/analysis_mne/processing/meg/"
     subject = '220401_30112_S1'
-    file_suffix = '_TSPCA.con'
+    file_suffix = '.con' #'_TSPCA.con'
 
     data_dir = MEG_dir + subject + '/'
     #%% Loop over conditions: pre, post, post2
@@ -61,7 +61,9 @@ def main():
             verbose=True,
         )
         
-        #%% Artefact rejection (autoreject & Ransac don't seem to find much)
+        #%% Artefact rejection (autoreject & Ransac are not finding much - 
+        # maybe they only target super large artefact - this makes sense; 
+        # in most cases, ICA seems to suffice - it can fix bad sensors & some LFN as well)
                
         # filtering for ICA
         raw_for_ICA = raw.copy()
@@ -90,7 +92,7 @@ def main():
         ica.plot_components() # plot IC topography
 
         # manually select which components to reject
-        ica.exclude = [0]
+        ica.exclude = [8, 17, 23, 58]
         # can also use automatic methods:
         # https://mne.tools/stable/auto_tutorials/preprocessing/40_artifact_correction_ica.html#using-a-simulated-channel-to-select-ica-components
         # https://github.com/LanceAbel/MQ_MEG_Analysis (selecting channels to simulate EOG)
@@ -100,7 +102,6 @@ def main():
         raw.plot(n_channels=160, title='before ICA') # before IC rejection
         ica.apply(raw)
         raw.plot(n_channels=160, title='after ICA') # after IC rejection
-        #TODO - IC rejection appears to cause only minimal changes? check again later...
 
         #%% Finding events
         events = mne.find_events(
