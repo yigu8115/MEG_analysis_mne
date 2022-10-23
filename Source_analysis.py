@@ -32,7 +32,7 @@ export SUBJECTS_DIR=/home/jzhu/analysis_mne/processing/mri/
 
 my_subject=FTD0185_MEG1441 # a new folder with this name will be created inside $SUBJECTS_DIR, to contain the output from recon-all
 my_nifti=/home/jzhu/analysis_mne/RawData/$my_subject/anat/FTD0185_T1a.nii # specify the input T1 scan
-recon-all -i $my_nifti -s $my_subject -all
+recon-all -i $my_nifti -s $my_subject -all -parallel #-openmp 6 # default 4 threads for parallel, can specify how many here
 
 mne make_scalp_surfaces --overwrite -s $my_subject -d $SUBJECTS_DIR --force
 mne watershed_bem -s $my_subject -d $SUBJECTS_DIR
@@ -257,7 +257,7 @@ src = fwd["src"]
 #del fwd
 
 
-# ===== Reconstruct source activity in A1 ===== #
+# ===== Reconstruct source activity ===== #
 
 # Tutorial:
 # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
@@ -314,8 +314,10 @@ for index, evoked in enumerate(evokeds):
 # 1. How do we choose an ROI, i.e. get source activity for A1 only? 
 #    (need to apply the label from freesurfer to work out which vertices belong to A1?)
 # https://mne.tools/stable/auto_examples/inverse/label_source_activations.html
-# See also: https://mne.tools/stable/auto_examples/visualization/parcellation.html
-# 
+# See also: 
+# https://mne.tools/stable/auto_examples/visualization/parcellation.html
+# https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html#volume-source-estimates
+
 # 2. How to compare stcs between 2 conds? atm I'm just plotting each of them separately ...
 #
 # Compare evoked response across conds (can do the same to compare stcs?)
