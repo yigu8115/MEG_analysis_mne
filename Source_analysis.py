@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Mar 27 15:05:12 2022
+#
+#@authors: Paul Sowman, Judy Zhu
 
-@author: mq20096022
-"""
 #######################################################################################
 
 # This resource by Christian Brodbeck is very useful:
@@ -37,6 +35,10 @@ recon-all -i $my_nifti -s $my_subject -all -parallel #-openmp 6 # default 4 thre
 mne make_scalp_surfaces --overwrite -s $my_subject -d $SUBJECTS_DIR --force
 mne watershed_bem -s $my_subject -d $SUBJECTS_DIR
 mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
+
+# convert any of the confiles to FIF format (to embed mrk & hsp), so we can do coreg later
+# (to save disk space, can just use the empty room confile!)
+mne kit2fiff --input fname.con --output fname.fif --mrk fname.mrk --elp fname.elp --hsp fname.hsp # should also include: --stim --stimthresh
 '''
 
 #######################################################################################
@@ -56,9 +58,9 @@ from mne.beamformer import make_lcmv, apply_lcmv
 # set up file and folder paths
 exp_dir = "/home/jzhu/analysis_mne/processing/"
 subjects_dir = exp_dir + "mri/"
-subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
-subject_MEG = '220112_p003' #'FTD0185_MEG1441'
-meg_task = '_1_oddball' #''
+subject = 'MMN_test' #'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
+subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+meg_task = '_TSPCA' #'_1_oddball' #''
 
 base_fname = exp_dir + "meg/" + subject_MEG + "/" + subject_MEG
 raw_fname = base_fname + meg_task + "-raw.fif"
@@ -68,7 +70,7 @@ fwd_fname = base_fname + "-fwd.fif"
 filters_fname = base_fname + meg_task + "-filters-lcmv.h5"
 filters_vec_fname = base_fname + meg_task + "-filters_vec-lcmv.h5"
 
-# adjust mne options to fix rendering issue (not needed in Windows)
+# adjust mne options to fix rendering issues in Linux (not needed in Windows)
 mne.viz.set_3d_options(antialias = 0, depth_peeling = 0) 
 
 
@@ -93,24 +95,24 @@ mne.viz.plot_bem(**plot_bem_kwargs) # plot bem
 # Coregister MRI with headshape from MEG digitisation 
 # (embedded in .fif file, whereas for KIT data we have a separate .hsp file)
 
-# Use the GUI for coreg, then save it as -trans.fif
+# Use the GUI for coreg, then save the results as -trans.fif
 mne.gui.coregistration(subject=subject, subjects_dir=subjects_dir)
-#mne coreg -s subject -d subjects_dir
 # Note: if this gives some issues with pyvista and vtk and the versions of python/mne,
 # just install the missing packages as prompted (traitlets, pyvista, pyvistaqt, pyqt5).
-# Also disable anti-aliasing if head model not rendering (see above)
+# Also disable anti-aliasing if head model not rendering (see above); hence we 
+# don't use "mne coreg" from command line (cannot set 3d options)
 
 # Here we plot the dense head, which isn't used for BEM computations but
 # is useful for checking alignment after coregistration
-info = mne.io.read_info(raw_fname)
+info = mne.io.read_info(raw_fname) # only supports fif file? For con file, you may need to read in the raw first (mne.io.read_raw_kit) then use raw.info
 mne.viz.plot_alignment(
     info,
     trans_fname,
     subject=subject,
-    dig=True,
-    meg=["helmet", "sensors"],
+    dig=True, # include digitised headshape
+    meg=["helmet", "sensors"], # include MEG helmet & sensors
     subjects_dir=subjects_dir,
-    surfaces="head-dense",
+    surfaces="head-dense", # include head surface from MRI
 )
 
 # also print out some info on distances
@@ -258,6 +260,9 @@ src = fwd["src"]
 
 
 # ===== Reconstruct source activity ===== #
+# Note: if running this part in Windows, copy everything over 
+# (from both the "mri" and "meg" folders), but can skip 
+# the "-raw.fif" (if large) as we can just use the con file below
 
 # Tutorial:
 # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
@@ -273,7 +278,7 @@ for cond in epochs.event_id:
     evokeds.append(epochs[cond].average())
 
 # compute cov matrices
-data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.5,
+data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.4,
                                   method='empirical')
 noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
                                    method='empirical')
@@ -301,10 +306,11 @@ for index, evoked in enumerate(evokeds):
     
     # plot the reconstructed source activity
     lims = [0.3, 0.45, 0.6] # set colour scale
-    kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir,
-                  initial_time=0.087, verbose=True)
+    kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
+                  initial_time=0.087)
     brain = stcs_vec[cond].plot_3d(
-        clim=dict(kind='value', lims=lims), hemi='both', size=(600, 600),
+        clim=dict(kind='value', lims=lims), 
+        hemi='both', size=(600, 600),
         #views=['sagittal'], # only show sag view
         view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
         brain_kwargs=dict(silhouette=True),
