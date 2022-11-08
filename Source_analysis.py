@@ -1,7 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/python3
 #
-#@authors: Paul Sowman, Judy Zhu
+# MEG source reconstruction using LCMV beamformer 
+# (can provide individual MRI or use fsaverage)
+#
+# Authors: Paul Sowman, Judy Zhu
 
 #######################################################################################
 
@@ -43,8 +45,8 @@ mne kit2fiff --input fname.con --output fname.fif --mrk fname.mrk --elp fname.el
 
 #######################################################################################
 
-#NOTE: all plots will close when the script finishes running.
-# In order to keep the figures open, use -i option when running, e.g.
+#NOTE: if running from terminal, all plots will close when the script ends;
+# in order to keep the figures open, use -i option when running, e.g.
 # python3 -i ~/my_GH/MEG_analysis_mne/Source_analysis.py
 
 import os.path as op
@@ -65,10 +67,15 @@ meg_task = '_TSPCA' #'_1_oddball' #''
 base_fname = exp_dir + "meg/" + subject_MEG + "/" + subject_MEG
 raw_fname = base_fname + meg_task + "-raw.fif"
 trans_fname = base_fname + meg_task + "-trans.fif"
-epochs_fname = base_fname + meg_task + "-epo.fif"
-fwd_fname = base_fname + "-fwd.fif"
-filters_fname = base_fname + meg_task + "-filters-lcmv.h5"
-filters_vec_fname = base_fname + meg_task + "-filters_vec-lcmv.h5"
+
+results_version = "results_for_RNN_comparison" # "results"
+results_dir = exp_dir + "meg/" + subject_MEG + "/" + results_version + "/"
+epochs_fname = results_dir + subject_MEG + meg_task + "-epo.fif"
+fwd_fname = results_dir + subject_MEG + "-fwd.fif"
+filters_fname = results_dir + subject_MEG + meg_task + "-filters-lcmv.h5"
+filters_vec_fname = results_dir + subject_MEG + meg_task + "-filters_vec-lcmv.h5"
+
+SHOW_PLOTS = False # turn this off if you just want to run whole thing & save results
 
 # adjust mne options to fix rendering issues in Linux (not needed in Windows)
 mne.viz.set_3d_options(antialias = 0, depth_peeling = 0) 
@@ -87,7 +94,8 @@ plot_bem_kwargs = dict(
     slices=[50, 100, 150, 200],
 ) # these args will be re-used below
 
-mne.viz.plot_bem(**plot_bem_kwargs) # plot bem
+if SHOW_PLOTS:
+    mne.viz.plot_bem(**plot_bem_kwargs) # plot bem
 
 
 # ===== Coregistration ===== #
@@ -96,7 +104,8 @@ mne.viz.plot_bem(**plot_bem_kwargs) # plot bem
 # (embedded in .fif file, whereas for KIT data we have a separate .hsp file)
 
 # Use the GUI for coreg, then save the results as -trans.fif
-mne.gui.coregistration(subject=subject, subjects_dir=subjects_dir)
+if SHOW_PLOTS:
+    mne.gui.coregistration(subject=subject, subjects_dir=subjects_dir)
 # Note: if this gives some issues with pyvista and vtk and the versions of python/mne,
 # just install the missing packages as prompted (traitlets, pyvista, pyvistaqt, pyqt5).
 # Also disable anti-aliasing if head model not rendering (see above); hence we 
@@ -105,15 +114,16 @@ mne.gui.coregistration(subject=subject, subjects_dir=subjects_dir)
 # Here we plot the dense head, which isn't used for BEM computations but
 # is useful for checking alignment after coregistration
 info = mne.io.read_info(raw_fname) # only supports fif file? For con file, you may need to read in the raw first (mne.io.read_raw_kit) then use raw.info
-mne.viz.plot_alignment(
-    info,
-    trans_fname,
-    subject=subject,
-    dig=True, # include digitised headshape
-    meg=["helmet", "sensors"], # include MEG helmet & sensors
-    subjects_dir=subjects_dir,
-    surfaces="head-dense", # include head surface from MRI
-)
+if SHOW_PLOTS:
+    mne.viz.plot_alignment(
+        info,
+        trans_fname,
+        subject=subject,
+        dig=True, # include digitised headshape
+        meg=["helmet", "sensors"], # include MEG helmet & sensors
+        subjects_dir=subjects_dir,
+        surfaces="head-dense", # include head surface from MRI
+    )
 
 # also print out some info on distances
 trans = mne.read_trans(trans_fname)
@@ -179,33 +189,37 @@ if op.exists(src_fname):
     src = mne.read_source_spaces(src_fname)
 else:
     surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
+    if (results_version == "results_for_RNN_comparison"): # use a more sparse source space
+        pos = 30 # use 30mm spacing -> produces about 54 vertices 
+                 # (default is 5mm -> produces more than 10000 vertices)
     src = mne.setup_volume_source_space(
-        subject, subjects_dir=subjects_dir, surface=surface, add_interpolator=True
+        subject, subjects_dir=subjects_dir, pos=pos, 
+        surface=surface, add_interpolator=True
     )
     # save to mri folder
-    mne.write_source_spaces(
-        src_fname, src
-    )
+    mne.write_source_spaces(src_fname, src)
     
 print(src)
-mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
+if SHOW_PLOTS:
+    mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
 
 
 # check alignment after creating source space
-fig = mne.viz.plot_alignment(
-    subject=subject,
-    subjects_dir=subjects_dir,
-    surfaces="white",
-    coord_frame="mri",
-    src=src,
-)
-mne.viz.set_3d_view(
-    fig,
-    azimuth=173.78,
-    elevation=101.75,
-    distance=0.35,
-    #focalpoint=(-0.03, -0.01, 0.03),
-)
+if SHOW_PLOTS:
+    fig = mne.viz.plot_alignment(
+        subject=subject,
+        subjects_dir=subjects_dir,
+        surfaces="white",
+        coord_frame="mri",
+        src=src,
+    )
+    mne.viz.set_3d_view(
+        fig,
+        azimuth=173.78,
+        elevation=101.75,
+        distance=0.35,
+        #focalpoint=(-0.03, -0.01, 0.03),
+    )
 
 
 # ===== Compute forward solution / leadfield ===== #
@@ -262,7 +276,7 @@ src = fwd["src"]
 # ===== Reconstruct source activity ===== #
 # Note: if running this part in Windows, copy everything over 
 # (from both the "mri" and "meg" folders), but can skip 
-# the "-raw.fif" (if large) as we can just use the con file below
+# the "-raw.fif" (if large) as we can just use the con file here
 
 # Tutorial:
 # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
@@ -292,29 +306,45 @@ filters = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
 filters_vec = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
                         noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
                         weight_norm='unit-noise-gain', rank=None)
-# save the filters for later
-filters.save(filters_fname, overwrite=True)
-filters_vec.save(filters_vec_fname, overwrite=True)
+# save the filters for later (but how to load?)
+#filters.save(filters_fname, overwrite=True)
+#filters_vec.save(filters_vec_fname, overwrite=True)
 
-# apply the spatial filter
+# apply the spatial filter (to get reconstructed source activity)
 stcs = dict()
 stcs_vec = dict()
 for index, evoked in enumerate(evokeds):
     cond = evoked.comment
-    stcs[cond] = apply_lcmv(evoked, filters)
-    stcs_vec[cond] = apply_lcmv(evoked, filters_vec)
+    stcs[cond] = apply_lcmv(evoked, filters) # timecourses contain both positive & negative values
+    stcs_vec[cond] = apply_lcmv(evoked, filters_vec) # timecourses contain both positive & negative values
+
+    # can save the source timecourses (vertices x samples) as numpy array file
+    stcs_vec[cond].data.shape
+    np.save(results_dir + "vec_" + cond + ".npy", stcs_vec[cond].data)
+
+    ## use the stcs_vec structure but swap in the results from RNN
+    # std_rnn_sources = np.load('standard_rnn_reshaped.npy')
+    # dev_rnn_sources = np.load('deviant_rnn_reshaped.npy')
+    # stcs_vec['standard'].data = std_rnn_sources
+    # stcs_vec['deviant'].data = dev_rnn_sources
     
-    # plot the reconstructed source activity
-    lims = [0.3, 0.45, 0.6] # set colour scale
-    kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
-                  initial_time=0.087)
-    brain = stcs_vec[cond].plot_3d(
-        clim=dict(kind='value', lims=lims), 
-        hemi='both', size=(600, 600),
-        #views=['sagittal'], # only show sag view
-        view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
-        brain_kwargs=dict(silhouette=True),
-        **kwargs)
+    # plot the source timecourses
+    if SHOW_PLOTS:
+        lims = [0.3, 0.45, 0.6] # set colour scale
+        kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
+                    initial_time=0.087)
+        brain = stcs_vec[cond].plot_3d(
+            clim=dict(kind='value', lims=lims), 
+            hemi='both', size=(600, 600),
+            #views=['sagittal'], # only show sag view
+            view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+            brain_kwargs=dict(silhouette=True),
+            **kwargs)
+
+    # combine stcs from 3 directions into 1 (all become positive values), 
+    # i.e. what the show_traces option gives you in stcs_vec[cond].plot_3d 
+    #stcs_vec[cond].magnitude().data
+
 
 # Q: 
 # 1. How do we choose an ROI, i.e. get source activity for A1 only? 
