@@ -57,25 +57,32 @@ import mne
 from mne.beamformer import make_lcmv, apply_lcmv
 
 
-# set up file and folder paths
-exp_dir = "/home/jzhu/analysis_mne/processing/"
-subjects_dir = exp_dir + "mri/"
+# set up file and folder paths here
+exp_dir = "/home/jzhu/analysis_mne/"
+processing_dir = exp_dir + "processing/"
+subjects_dir = processing_dir + "mri/"
 subject = 'MMN_test' #'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
 subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_TSPCA' #'_1_oddball' #''
 
-base_fname = exp_dir + "meg/" + subject_MEG + "/" + subject_MEG
-raw_fname = base_fname + meg_task + "-raw.fif"
-trans_fname = base_fname + meg_task + "-trans.fif"
+# specify a name for this run (to save intermediate processing files)
+run_name = "beamformer_for_RNN_comparison" # "beamformer"
 
-results_version = "results_for_RNN_comparison" # "results"
-results_dir = exp_dir + "meg/" + subject_MEG + "/" + results_version + "/"
-epochs_fname = results_dir + subject_MEG + meg_task + "-epo.fif"
-fwd_fname = results_dir + subject_MEG + "-fwd.fif"
-filters_fname = results_dir + subject_MEG + meg_task + "-filters-lcmv.h5"
-filters_vec_fname = results_dir + subject_MEG + meg_task + "-filters_vec-lcmv.h5"
+# set to False if you just want to run the whole script & save results
+SHOW_PLOTS = False 
 
-SHOW_PLOTS = False # turn this off if you just want to run whole thing & save results
+
+# the paths below should be automatic
+base_fname = processing_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task
+raw_fname = base_fname + "-raw.fif"
+trans_fname = base_fname + "-trans.fif"
+epochs_fname = base_fname + "-epo.fif"
+
+save_dir = processing_dir + "meg/" + subject_MEG + "/" + run_name + "/"
+fwd_fname = save_dir + subject_MEG + "-fwd.fif"
+filters_fname = save_dir + subject_MEG + meg_task + "-filters-lcmv.h5"
+filters_vec_fname = save_dir + subject_MEG + meg_task + "-filters_vec-lcmv.h5"
+
 
 # adjust mne options to fix rendering issues in Linux (not needed in Windows)
 mne.viz.set_3d_options(antialias = 0, depth_peeling = 0) 
@@ -143,7 +150,7 @@ print(
 )
 
 
-# ===== Compute source space ===== #
+# ===== Create source space ===== #
 
 # Note: beamformers are usually computed in a volume source space (3rd option below), 
 # because estimating only cortical surface activation can misrepresent the data
@@ -189,7 +196,7 @@ if op.exists(src_fname):
     src = mne.read_source_spaces(src_fname)
 else:
     surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
-    if (results_version == "results_for_RNN_comparison"): # use a more sparse source space
+    if (run_name == "beamformer_for_RNN_comparison"): # use a more sparse source space
         pos = 30 # use 30mm spacing -> produces about 54 vertices 
                  # (default is 5mm -> produces more than 10000 vertices)
     src = mne.setup_volume_source_space(
@@ -274,6 +281,7 @@ src = fwd["src"]
 
 
 # ===== Reconstruct source activity ===== #
+
 # Note: if running this part in Windows, copy everything over 
 # (from both the "mri" and "meg" folders), but can skip 
 # the "-raw.fif" (if large) as we can just use the con file here
@@ -320,7 +328,7 @@ for index, evoked in enumerate(evokeds):
 
     # can save the source timecourses (vertices x samples) as numpy array file
     stcs_vec[cond].data.shape
-    np.save(results_dir + "vec_" + cond + ".npy", stcs_vec[cond].data)
+    np.save(save_dir + "vec_" + cond + ".npy", stcs_vec[cond].data)
 
     ## use the stcs_vec structure but swap in the results from RNN
     # std_rnn_sources = np.load('standard_rnn_reshaped.npy')

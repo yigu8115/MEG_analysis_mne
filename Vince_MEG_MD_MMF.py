@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Nov  9 12:34:36 2021
+#!/usr/bin/python3
+#
+# MEG sensor space analysis for auditory roving MMF
+#
+# Authors: Paul Sowman, Judy Zhu
 
-@author: mq20096022
-"""
+#######################################################################################
+
 import os
 import mne
 import glob
@@ -24,14 +25,24 @@ from mne.decoding import EMS
 
 #os.chdir("/Users/mq20096022/Downloads/MD_pilot1/")
 #os.chdir("/Users/mq20096022/Downloads/220112_p003/")
-#os.chdir("/home/jzhu/analysis_mne/RawData/220112_p003/meg/")
-os.chdir("/home/jzhu/analysis_mne/processing/meg/MMN_test/")
+#os.chdir("/home/jzhu/analysis_mne/data/220112_p003/meg/")
+
+# set up file and folder paths here
+exp_dir = "/home/jzhu/analysis_mne/"
+subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+meg_task = '_TSPCA' #'_1_oddball' #''
+
+# the paths below should be automatic
+data_dir = exp_dir + "data/"
+processing_dir = exp_dir + "processing/"
+meg_dir = data_dir + subject_MEG + "/meg/"
+epochs_fname = processing_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task + "-epo.fif"
 
 #print(glob.glob("*_oddball.con"))
-fname_raw = glob.glob("*.con")
-fname_elp = glob.glob("*.elp")
-fname_hsp = glob.glob("*.hsp")
-fname_mrk = glob.glob("*.mrk")
+fname_raw = glob.glob(meg_dir + "*" + meg_task + ".con")
+fname_elp = glob.glob(meg_dir + "*.elp")
+fname_hsp = glob.glob(meg_dir + "*.hsp")
+fname_mrk = glob.glob(meg_dir + "*.mrk")
 
 #%% Raw extraction ch misc 23-29 = triggers
 # ch misc 007 = audio
@@ -43,7 +54,7 @@ raw = mne.io.read_raw_kit(
     stim=[*[166], *range(182, 190)],
     slope="+",
     stim_code="channel",
-    stimthresh=1,  # 2 for adults
+    stimthresh=2,  # 2 for adult (1 for child??)
     preload=True,
     allow_unknown_format=False,
     verbose=True,
@@ -55,7 +66,7 @@ events = mne.find_events(
     output="onset",
     consecutive=False,
     min_duration=0,
-    shortest_event=1,  # 5 for adults
+    shortest_event=1,  # 5 for adult
     mask=None,
     uint_cast=False,
     mask_type="and",
@@ -79,7 +90,7 @@ event_ids = {
     "deviant": 2,
 }
 
-# adjust timing based on audio triggers (see bottom of "..._VEP" script) 
+# adjust timing based on audio triggers (see bottom of "..._VEP" script, or Jamie script) 
 # OR use a fixed delay (~160ms)
 import copy
 events_corrected = copy.copy(events)
