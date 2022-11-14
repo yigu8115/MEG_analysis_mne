@@ -19,6 +19,8 @@ from autoreject import Ransac  # noqa
 from autoreject.utils import interpolate_bads  # noqa
 from mne.decoding import EMS
 
+import my_preprocessing
+
 # We can use the `decim` parameter to only take every nth time slice.
 # This speeds up the computation time. Note however that for low sampling
 # rates and high decimation parameters, you might not detect "peaky artifacts"
@@ -42,7 +44,7 @@ save_dir = processing_dir + "meg/" + subject_MEG + "/"
 epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
 
 
-# === Read raw data === #
+#%% === Read raw data === #
 
 #print(glob.glob("*_oddball.con"))
 fname_raw = glob.glob(meg_dir + "*" + meg_task + ".con")
@@ -50,7 +52,7 @@ fname_elp = glob.glob(meg_dir + "*.elp")
 fname_hsp = glob.glob(meg_dir + "*.hsp")
 fname_mrk = glob.glob(meg_dir + "*.mrk")
 
-#%% Raw extraction ch misc 23-29 = triggers
+# Raw extraction ch misc 23-29 = triggers
 # ch misc 007 = audio
 raw = mne.io.read_raw_kit(
     fname_raw[0],  # change depending on file i want
@@ -66,17 +68,13 @@ raw = mne.io.read_raw_kit(
     verbose=True,
 )
 
-
-# === Artefact rejection & ICA === #
-
-#TODO: see ..._VEP.py script
-# Can we put this part into a separate script/function? 
-# so that we don't have repeated code for MMF / VEP / rs analysis ...
+# Filtering & ICA
+raw = my_preprocessing.reject_artefact(raw, 0.1, 30)
 
 
-# === Trigger detection & timing correction === #
+#%% === Trigger detection & timing correction === #
 
-#%% Finding events
+# Finding events
 events = mne.find_events(
     raw,
     output="onset",
@@ -230,9 +228,15 @@ events_corrected[:,0] = events[:,0] + 150
 '''
 
 
-# === Epoching === #
+#%% === Epoching === #
 
 epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
+
+#TODO: should we do another autoreject / Ransac here? (so far have only done it
+# on the arbitrary epochs created for ICA)
+# if so, should the rejection threhold be based on only these 2 conditions 
+# of interest, or all epochs?
+
 conds_we_care_about = ["standard", "deviant"]
 epochs.equalize_event_counts(conds_we_care_about)
 
