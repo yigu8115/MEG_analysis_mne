@@ -11,6 +11,8 @@ import mne
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
+import copy
+
 from mne.preprocessing import find_bad_channels_maxwell
 from autoreject import get_rejection_threshold  # noqa
 from autoreject import Ransac  # noqa
@@ -36,7 +38,11 @@ meg_task = '_TSPCA' #'_1_oddball' #''
 data_dir = exp_dir + "data/"
 processing_dir = exp_dir + "processing/"
 meg_dir = data_dir + subject_MEG + "/meg/"
-epochs_fname = processing_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task + "-epo.fif"
+save_dir = processing_dir + "meg/" + subject_MEG + "/"
+epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
+
+
+# === Read raw data === #
 
 #print(glob.glob("*_oddball.con"))
 fname_raw = glob.glob(meg_dir + "*" + meg_task + ".con")
@@ -60,6 +66,16 @@ raw = mne.io.read_raw_kit(
     verbose=True,
 )
 
+
+# === Artefact rejection & ICA === #
+
+#TODO: see ..._VEP.py script
+# Can we put this part into a separate script/function? 
+# so that we don't have repeated code for MMF / VEP / rs analysis ...
+
+
+# === Trigger detection & timing correction === #
+
 #%% Finding events
 events = mne.find_events(
     raw,
@@ -74,29 +90,149 @@ events = mne.find_events(
     verbose=None,
 )
 
-# get rid of audio trigger for now
+# get rid of audio triggers for now
 events = np.delete(events, np.where(events[:, 2] == 166), 0)
 
 # re-code standard & deviant trials as '1' and '2'
 #events = copy.deepcopy(events)
-std_dev_bool = np.insert(np.diff(events[:, 2]) != 0, 0, "True")
+std_dev_bool = np.insert(np.diff(events[:, 2]) != 0, 0, "True") # find all deviants & mark as "True"
 for idx, event in enumerate(std_dev_bool):
-    if event and idx > 0:
-        events[idx, 2] = 2
+    if event and idx > 0: # for all deviants (except for the very first trial, which we won't use)
+        events[idx, 2] = 2 # code current trial as '2'
         if events[idx - 1, 2] != 2:
-            events[idx - 1, 2] = 1
+            events[idx - 1, 2] = 1 # code previous trial as '1'
+# specify the event_ids dict (for epoching)
 event_ids = {
     "standard": 1,
     "deviant": 2,
 }
 
-# adjust timing based on audio triggers (see bottom of "..._VEP" script, or Jamie script) 
-# OR use a fixed delay (~160ms)
-import copy
-events_corrected = copy.copy(events)
-events_corrected[:,0] = events[:,0] + 160
 
-epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.4, preload=True)
+# Adjust trigger timing based on audio channel signal 
+
+# get raw audio signal from ch166
+aud_ch_data_raw = raw.get_data(picks="MISC 007")
+
+# Opt 1: use Jamie script
+'''
+np.save(save_dir + 'audio_channel_raw.npy', aud_ch_data_raw) 
+
+# NOW we need to manually run "04_process_raw_audio..."" script by Jamie
+
+# then load the results
+stim_tps = np.load(save_dir + 'audio_channel_triggers.npy')
+'''
+
+# Opt 2: use getEnvelope function
+
+def getEnvelope(inputSignal):
+
+    # Taking the absolute value
+    absoluteSignal = []
+    for sample in inputSignal:
+        absoluteSignal.append(abs(sample))
+    absoluteSignal = absoluteSignal[0]
+
+    # Peak detection
+    intervalLength = 5  # Experiment with this number
+    outputSignal = []
+
+    # Like a sample and hold filter
+    for baseIndex in range(intervalLength, len(absoluteSignal)):
+        maximum = 0
+        for lookbackIndex in range(intervalLength):
+            maximum = max(absoluteSignal[baseIndex - lookbackIndex], maximum)
+        outputSignal.append(maximum)
+
+    outputSignal = np.concatenate(
+        (
+            np.zeros(intervalLength),
+            np.array(outputSignal)[:-intervalLength],
+            np.zeros(intervalLength),
+        )
+    )
+    # finally binarise the output at a threshold of 2.5  <-  adjust this 
+    # threshold based on diagnostic plot below!
+    return np.array([1 if np.abs(x) > 0.2 else 0 for x in outputSignal])
+
+#raw.load_data().apply_function(getEnvelope, picks="MISC 006")
+envelope = getEnvelope(aud_ch_data_raw)
+envelope = envelope.tolist() # convert ndarray to list
+# detect the beginning of each envelope (set the rest of the envelope to 0)
+new_stim_ch = np.clip(np.diff(envelope),0,1)
+# find all the 1s (i.e. audio triggers)
+stim_tps = np.where(new_stim_ch==1)[0]
+
+# compare number of events from trigger channels & from AD
+print("Number of events from trigger channels:", events.shape[0])
+print("Number of events from audio channel (166) signal:", stim_tps.shape[0])
+
+# plot any problematic time period to aid diagnosis
+'''
+test_time = 454368
+span = 1000
+plt.figure()
+plt.plot(aud_ch_data_raw[0], 'b')
+#plt.plot(outputSignal, 'r')
+for i in range(events.shape[0]):
+   plt.axvline(events[i,0], color='b', lw=2, ls='--')
+   plt.axvline(stim_tps[i], color='r', lw=2, ls='--')
+plt.xlim(test_time-span, test_time+span)
+plt.show()
+'''
+
+# apply timing correction onto the events array
+events_corrected = copy.copy(events) # work on a copy so we don't affect the original
+
+# Missing AD triggers can be handled:
+# if there's an AD trigger within 100-200ms after trigger channel (this ensures 
+# we've got the correct trial), update to AD timing;
+# if there's no AD trigger within this time range, discard the trial
+AD_delta = []
+missing = [] # keep track of the trials to discard (due to missing AD trigger)
+for i in range(events.shape[0]):
+    idx = np.where((stim_tps > events[i,0]+100) & (stim_tps <= events[i,0]+200))
+    if len(idx[0]): # if an AD trigger exists within 200ms of trigger channel
+        idx = idx[0][0] # use the first AD trigger (if there are multiple)
+        AD_delta.append(stim_tps[idx] - events[i,0]) # keep track of audio delay values (for histogram)
+        events_corrected[i,0] = stim_tps[idx] # update event timing
+    else:
+        missing.append(i)
+# discard events which could not be corrected
+events_corrected = np.delete(events_corrected, missing, 0)
+print("Could not correct", len(missing), "events - these were discarded!")
+
+# histogram showing the distribution of audio delays
+n, bins, patches = plt.hist(
+    x=AD_delta, bins="auto", color="#0504aa", alpha=0.7, rwidth=0.85
+)
+plt.grid(axis="y", alpha=0.75)
+plt.xlabel("Delay (ms)")
+plt.ylabel("Frequency")
+plt.title("Audio Detector Delays")
+plt.text(
+    70,
+    50,
+    r"$mean="
+    + str(round(np.mean(AD_delta)))
+    + ", std="
+    + str(round(np.std(AD_delta)))
+    + "$",
+)
+maxfreq = n.max()
+# set a clean upper y-axis limit
+plt.ylim(ymax=np.ceil(maxfreq / 10) * 10 if maxfreq % 10 else maxfreq + 10)
+
+# Opt 3: use a fixed delay (~150ms)
+'''
+events_corrected = copy.copy(events)
+events_corrected[:,0] = events[:,0] + 150
+'''
+
+
+# === Epoching === #
+
+epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
 conds_we_care_about = ["standard", "deviant"]
 epochs.equalize_event_counts(conds_we_care_about)
 
@@ -105,17 +241,19 @@ print("Original sampling rate:", epochs.info["sfreq"], "Hz")
 epochs_resampled = epochs.copy().resample(100, npad="auto")
 print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
 
-# save for use in Source_analysis script
-epochs_resampled.save("MMN_test_TSPCA-epo.fif")
+# save for later use (e.g. in Source_analysis script)
+epochs_resampled.save(epochs_fname)
 
+# plot ERFs
 mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
-
 mne.viz.plot_compare_evokeds(
     [
         epochs_resampled["standard"].average(),
         epochs_resampled["deviant"].average(),
     ]
 )
+
+#############################################################################
 
 epochs_resampled.pick_types(meg=True, exclude="bads")
 X = epochs_resampled.get_data()  # MEG signals: n_epochs, n_channels, n_times
@@ -129,7 +267,6 @@ y = epochs_resampled.events[:, 2]  # target: Standard or Deviant
 # y = epochs.events[:, 2]  # The conditions indices
 n_epochs, n_channels, n_times = X.shape
 
-#############################################################################
 
 # Initialize EMS transformer
 ems = EMS()
