@@ -1,5 +1,10 @@
-#!/usr/bin/env python3
-#@authors: Paul Sowman, Judy Zhu
+#!/usr/bin/python3
+#
+# MEG sensor space analysis for visual LTP (vertical & horizontal gratings)
+#
+# Authors: Paul Sowman, Judy Zhu
+
+#######################################################################################
 
 import mne
 import glob
@@ -12,6 +17,8 @@ from autoreject import Ransac  # noqa
 from autoreject.utils import interpolate_bads  # noqa
 
 from scipy import stats
+
+import my_preprocessing
 
 # Make plots interactive when running in interactive window in vscode
 #plt.switch_backend('TkAgg') You can use this backend if needed
@@ -61,47 +68,9 @@ def main():
             verbose=True,
         )
         
-        #%% Artefact rejection (autoreject & Ransac are not finding much - 
-        # maybe they only target super large artefact - this makes sense; 
-        # in most cases, ICA seems to suffice - it can fix bad sensors & some LFN as well)
-               
-        # filtering for ICA
-        raw_for_ICA = raw.copy()
-        raw_for_ICA.filter(l_freq=1.0, h_freq=30)
-        # 'autoreject' requires epoched data
-        # here we create arbitrary epochs (making use of all data - useful for short recordings)
-        tstep = 1.0 # make 1 second epochs
-        events_ICA = mne.make_fixed_length_events(raw_for_ICA, duration=tstep)
-        epochs_ICA = mne.Epochs(
-            raw_for_ICA, events_ICA, tmin=0.0, tmax=tstep, baseline=None, preload=True
-        )
-        # use 'autoreject' to compute a threshold for removing large noise
-        reject = get_rejection_threshold(epochs_ICA)
-        reject # print the result
-        # remove large noise before running ICA
-        #epochs_ICA.load_data() # to avoid reading epochs from disk multiple times
-        epochs_ICA.drop_bad(reject=reject)
-        # could also try Ransac
-        #ransac = Ransac(verbose=True, n_jobs=1)
-        #epochs_ICA_clean = ransac.fit_transform(epochs_ICA)
+        # Filtering & ICA
+        raw = my_preprocessing.reject_artefact(raw, 0.1, 30)
 
-        # run ICA
-        ica = ICA(n_components=60, max_iter="auto", random_state=97)
-        ica.fit(epochs_ICA, tstep=tstep) # 'reject' param here only works for continuous data, so we use drop_bad() above instead
-        ica.plot_sources(raw) # plot IC time series
-        ica.plot_components() # plot IC topography
-
-        # manually select which components to reject
-        ica.exclude = [8, 17, 23, 58]
-        # can also use automatic methods:
-        # https://mne.tools/stable/auto_tutorials/preprocessing/40_artifact_correction_ica.html#using-a-simulated-channel-to-select-ica-components
-        # https://github.com/LanceAbel/MQ_MEG_Analysis (selecting channels to simulate EOG)
-
-        # apply component rejection onto raw (continuous) data
-        raw.filter(l_freq=0.1, h_freq=30)
-        raw.plot(n_channels=160, title='before ICA') # before IC rejection
-        ica.apply(raw)
-        raw.plot(n_channels=160, title='after ICA') # after IC rejection
 
         #%% Finding events
         events = mne.find_events(
@@ -230,37 +199,6 @@ def main():
     #     evokeds=evoked, titles=["VEP"], n_time_points=25  # Manually specify titles
     # )
     # report.save(fname_raw[0] + "_report_evoked.html", overwrite=True)
-
-    #%% Function to get envelope of signal
-
-
-def getEnvelope(inputSignal):
-
-    # Taking the absolute value
-    absoluteSignal = []
-    for sample in inputSignal:
-        absoluteSignal.append(abs(sample))
-
-    # Peak detection
-    intervalLength = 5  # Experiment with this number
-    outputSignal = []
-
-    # Like a sample and hold filter
-    for baseIndex in range(intervalLength, len(absoluteSignal)):
-        maximum = 0
-        for lookbackIndex in range(intervalLength):
-            maximum = max(absoluteSignal[baseIndex - lookbackIndex], maximum)
-        outputSignal.append(maximum)
-
-    outputSignal = np.concatenate(
-        (
-            np.zeros(intervalLength),
-            np.array(outputSignal)[:-intervalLength],
-            np.zeros(intervalLength),
-        )
-    )
-    # finally binarise the output at a threshold of 2.5
-    return np.array([1 if np.abs(x) > 0.5 else 0 for x in outputSignal])
 
 
 if __name__ == "__main__":
