@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #
 # MEG source reconstruction using LCMV beamformer 
-# (can provide individual MRI or use fsaverage)
+# (can use individual MRI or fsaverage)
 #
 # Authors: Paul Sowman, Judy Zhu
 
@@ -27,20 +27,12 @@ export SUBJECTS_DIR=/home/jzhu/analysis_mne/processing/mri/
 #import os
 #os.system('your command here')
 
-# The other OS commands below can also be run this way.
-# or put into spawner script for batch processing.
 
+# If using individual MRI scans, batch process recon-all on all subjects first 
+# on a fast computer (can use spawner script)
 my_subject=FTD0185_MEG1441 # a new folder with this name will be created inside $SUBJECTS_DIR, to contain the output from recon-all
-my_nifti=/home/jzhu/analysis_mne/RawData/$my_subject/anat/FTD0185_T1a.nii # specify the input T1 scan
+my_nifti=/home/jzhu/analysis_mne/data/$my_subject/anat/FTD0185_T1a.nii # specify the input T1 scan
 recon-all -i $my_nifti -s $my_subject -all -parallel #-openmp 6 # default 4 threads for parallel, can specify how many here
-
-mne make_scalp_surfaces --overwrite -s $my_subject -d $SUBJECTS_DIR --force
-mne watershed_bem -s $my_subject -d $SUBJECTS_DIR
-mne setup_forward_model -s $my_subject -d $SUBJECTS_DIR --homog --ico 4
-
-# convert any of the confiles to FIF format (to embed mrk & hsp), so we can do coreg later
-# (to save disk space, can just use the empty room confile!)
-mne kit2fiff --input fname.con --output fname.fif --mrk fname.mrk --elp fname.elp --hsp fname.hsp # should also include: --stim --stimthresh
 '''
 
 #######################################################################################
@@ -49,9 +41,11 @@ mne kit2fiff --input fname.con --output fname.fif --mrk fname.mrk --elp fname.el
 # in order to keep the figures open, use -i option when running, e.g.
 # python3 -i ~/my_GH/MEG_analysis_mne/Source_analysis.py
 
+import os
 import os.path as op
 import numpy as np
 import matplotlib.pyplot as plt
+import glob
 
 import mne
 from mne.beamformer import make_lcmv, apply_lcmv
@@ -59,8 +53,6 @@ from mne.beamformer import make_lcmv, apply_lcmv
 
 # set up file and folder paths here
 exp_dir = "/home/jzhu/analysis_mne/"
-processing_dir = exp_dir + "processing/"
-subjects_dir = processing_dir + "mri/"
 subject = 'MMN_test' #'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
 subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_TSPCA' #'_1_oddball' #''
@@ -73,8 +65,14 @@ SHOW_PLOTS = False
 
 
 # the paths below should be automatic
+data_dir = exp_dir + "data/"
+meg_dir = data_dir + subject_MEG + "/meg/"
+processing_dir = exp_dir + "processing/"
+subjects_dir = processing_dir + "mri/"
+
 base_fname = processing_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task
-raw_fname = base_fname + "-raw.fif"
+raw_fname = base_fname + "_emptyroom-raw.fif" #"-raw.fif" 
+# just use empty room recording for kit2fiff (embedding hsp for coreg) & for mne.io.read_info()
 trans_fname = base_fname + "-trans.fif"
 epochs_fname = base_fname + "-epo.fif"
 
@@ -84,14 +82,23 @@ filters_fname = save_dir + subject_MEG + meg_task + "-filters-lcmv.h5"
 filters_vec_fname = save_dir + subject_MEG + meg_task + "-filters_vec-lcmv.h5"
 
 
-# adjust mne options to fix rendering issues in Linux (not needed in Windows)
+# adjust mne options to fix rendering issues in Linux / WSL (not needed in Windows)
 mne.viz.set_3d_options(antialias = 0, depth_peeling = 0) 
 
 
 # Follow the steps here:
 # https://mne.tools/stable/auto_tutorials/forward/30_forward.html
 
-# plot the head surface (BEM) computed from MRI
+
+# ===== Compute head surfaces ===== #
+
+# Note: these commands require both MNE & Freesurfer
+if not op.exists(subjects_dir + subject + '/bem/inner_skull.surf'): # check one of the target files to see if these steps have been run already
+    os.system('mne make_scalp_surfaces --overwrite -s ' + subject + ' -d ' + subjects_dir + ' --force')
+    os.system('mne watershed_bem -s ' + subject + ' -d ' + subjects_dir)
+    os.system('mne setup_forward_model -s ' + subject + ' -d ' + subjects_dir + ' --homog --ico 4')
+
+# specify some settings for plots (will be re-used below)
 plot_bem_kwargs = dict(
     subject=subject,
     subjects_dir=subjects_dir,
@@ -99,24 +106,37 @@ plot_bem_kwargs = dict(
                             # files in the subject’s surf directory
     orientation="coronal",
     slices=[50, 100, 150, 200],
-) # these args will be re-used below
+)
 
+# plot the head surface (BEM) computed from MRI
 if SHOW_PLOTS:
     mne.viz.plot_bem(**plot_bem_kwargs) # plot bem
 
 
 # ===== Coregistration ===== #
 
-# Coregister MRI with headshape from MEG digitisation 
-# (embedded in .fif file, whereas for KIT data we have a separate .hsp file)
+# Coregister MRI scan with headshape from MEG digitisation 
+
+# For FIF files, hsp info are embedded in it, whereas for KIT data we have a separate .hsp file.
+# So, convert the confile to FIF format first (to embed mrk & hsp), which can then be loaded during coreg.
+# (Note: to save disk space, we just use the empty room confile here!)
+if not op.exists(raw_fname):
+    file_raw = glob.glob(meg_dir + "*empty*.con")
+    file_elp = glob.glob(meg_dir + "*.elp")
+    file_hsp = glob.glob(meg_dir + "*.hsp")
+    file_mrk = glob.glob(meg_dir + "*.mrk")
+    os.system('mne kit2fiff --input ' + file_raw[0] + ' --output ' + raw_fname + 
+    ' --mrk ' + file_mrk[0] + ' --elp ' + file_elp[0] + ' --hsp ' + file_hsp[0])
 
 # Use the GUI for coreg, then save the results as -trans.fif
-if SHOW_PLOTS:
+if not op.exists(trans_fname):
     mne.gui.coregistration(subject=subject, subjects_dir=subjects_dir)
 # Note: if this gives some issues with pyvista and vtk and the versions of python/mne,
 # just install the missing packages as prompted (traitlets, pyvista, pyvistaqt, pyqt5).
 # Also disable anti-aliasing if head model not rendering (see above); hence we 
 # don't use "mne coreg" from command line (cannot set 3d options)
+
+trans = mne.read_trans(trans_fname)
 
 # Here we plot the dense head, which isn't used for BEM computations but
 # is useful for checking alignment after coregistration
@@ -133,7 +153,6 @@ if SHOW_PLOTS:
     )
 
 # also print out some info on distances
-trans = mne.read_trans(trans_fname)
 print(
     "Distance from head origin to MEG origin: %0.1f mm"
     % (1000 * np.linalg.norm(info["dev_head_t"]["trans"][:3, 3]))
@@ -242,7 +261,7 @@ else:
     bem = mne.make_bem_solution(model)
 
     fwd = mne.make_forward_solution(
-        raw_fname,
+        info,
         trans=trans,
         src=src,
         bem=bem,
