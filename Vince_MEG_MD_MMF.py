@@ -69,7 +69,7 @@ raw = mne.io.read_raw_kit(
 )
 
 # Filtering & ICA
-raw = my_preprocessing.reject_artefact(raw, 0.1, 30)
+raw = my_preprocessing.reject_artefact(raw, 0.1, 40)
 
 
 #%% === Trigger detection & timing correction === #

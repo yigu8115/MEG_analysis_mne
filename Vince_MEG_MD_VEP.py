@@ -69,7 +69,7 @@ def main():
         )
         
         # Filtering & ICA
-        raw = my_preprocessing.reject_artefact(raw, 0.1, 30)
+        raw = my_preprocessing.reject_artefact(raw, 0.1, 40)
 
 
         #%% Finding events
