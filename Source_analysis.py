@@ -53,15 +53,15 @@ from mne.beamformer import make_lcmv, apply_lcmv
 
 # set up file and folder paths here
 exp_dir = "/home/jzhu/analysis_mne/"
-subject = 'MMN_test' #'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
+subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
 subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_TSPCA' #'_1_oddball' #''
 
 # specify a name for this run (to save intermediate processing files)
-run_name = "beamformer_for_RNN_comparison" # "beamformer"
+run_name = "beamformer" #"beamformer_for_RNN_comparison"
 
 # set to False if you just want to run the whole script & save results
-SHOW_PLOTS = False 
+SHOW_PLOTS = True 
 
 
 # the paths below should be automatic
@@ -216,8 +216,9 @@ if op.exists(src_fname):
 else:
     surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
     if (run_name == "beamformer_for_RNN_comparison"): # use a more sparse source space
-        pos = 30 # use 30mm spacing -> produces about 54 vertices 
-                 # (default is 5mm -> produces more than 10000 vertices)
+        pos = 30 # use 30mm spacing -> produces about 54 vertices               
+    else:
+        pos = 5 # (default is 5mm -> produces more than 10000 vertices)
     src = mne.setup_volume_source_space(
         subject, subjects_dir=subjects_dir, pos=pos, 
         surface=surface, add_interpolator=True
