@@ -53,7 +53,7 @@ from mne.beamformer import make_lcmv, apply_lcmv
 
 # set up file and folder paths here
 exp_dir = "/home/jzhu/analysis_mne/"
-subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
+subject = 'MMN_test' #'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
 subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_TSPCA' #'_1_oddball' #''
 
@@ -61,7 +61,7 @@ meg_task = '_TSPCA' #'_1_oddball' #''
 run_name = "beamformer" #"beamformer_for_RNN_comparison"
 
 # set to False if you just want to run the whole script & save results
-SHOW_PLOTS = True 
+SHOW_PLOTS = False 
 
 
 # the paths below should be automatic
@@ -381,6 +381,32 @@ for index, evoked in enumerate(evokeds):
 # See also: 
 # https://mne.tools/stable/auto_examples/visualization/parcellation.html
 # https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html#volume-source-estimates
+
+# choose atlas for parcellation
+fname_aseg = subjects_dir + subject + '/mri/aparc.a2009s+aseg.mgz'
+rois = ['ctx_rh_G_temp_sup-Lateral']  # can have multiple labels in this list
+
+#label_names = mne.get_volume_labels_from_aseg(fname_aseg)
+#roi_idx = label_names.index(rois[0])
+#colours = ['b', 'r']
+
+# make one plot for mean, one plot for max
+modes = ('mean', 'max')
+for mode in modes:
+    fig, ax = plt.subplots(1)
+    for cond, value in stcs.items():
+        ax.plot(stcs[cond].times, np.squeeze(stcs[cond].extract_label_time_course(
+            (fname_aseg, rois), src=src, mode=mode)),
+            lw=2., alpha=0.5, label=cond)
+        ax.set(xlim=stcs[cond].times[[0, -1]],
+               xlabel='Time (s)', ylabel='Activation')
+
+    # this would need to be dynamic for multiple rois
+    ax.set(title=mode + '_' + rois[0])
+    ax.legend()
+    for loc in ('right', 'top'):
+        ax.spines[loc].set_visible(False)
+    fig.tight_layout()
 
 # 2. How to compare stcs between 2 conds? atm I'm just plotting each of them separately ...
 #
