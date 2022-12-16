@@ -390,14 +390,17 @@ rois = ['ctx_rh_G_temp_sup-Lateral']  # can have multiple labels in this list
 #roi_idx = label_names.index(rois[0])
 #colours = ['b', 'r']
 
+# choose how to combine the vertices in an ROI
+modes = ('mean')#, 'max') # plain mean will prob cancel things out - try RMS!
+                        # Paul: max is prob also not good
+                        # for non-volumetric src, there are other options, e.g. PCA
 # make one plot for mean, one plot for max
-modes = ('mean', 'max')
 for mode in modes:
     fig, ax = plt.subplots(1)
     for cond, value in stcs.items():
-        ax.plot(stcs[cond].times, np.squeeze(stcs[cond].extract_label_time_course(
-            (fname_aseg, rois), src=src, mode=mode)),
-            lw=2., alpha=0.5, label=cond)
+        roi_timecourse = np.squeeze((stcs[cond]**2).extract_label_time_course(
+            (fname_aseg, rois), src=src, mode=mode)**0.5) # use RMS (square then average then sqrt)
+        ax.plot(stcs[cond].times, roi_timecourse, lw=2., alpha=0.5, label=cond)
         ax.set(xlim=stcs[cond].times[[0, -1]],
                xlabel='Time (s)', ylabel='Activation')
 
@@ -407,6 +410,26 @@ for mode in modes:
     for loc in ('right', 'top'):
         ax.spines[loc].set_visible(False)
     fig.tight_layout()
+
+# Try 'auto' mode: (cf with RMS plot - if similar then prob good?)
+# https://mne.tools/stable/generated/mne.extract_label_time_course.html
+modes = ('auto') 
+for mode in modes:
+    fig, ax = plt.subplots(1)
+    for cond, value in stcs.items():
+        roi_timecourse = np.squeeze(stcs[cond].extract_label_time_course(
+            (fname_aseg, rois), src=src, mode=mode))
+        ax.plot(stcs[cond].times, roi_timecourse, lw=2., alpha=0.5, label=cond)
+        ax.set(xlim=stcs[cond].times[[0, -1]],
+               xlabel='Time (s)', ylabel='Activation')
+
+    # this would need to be dynamic for multiple rois
+    ax.set(title=mode + '_' + rois[0])
+    ax.legend()
+    for loc in ('right', 'top'):
+        ax.spines[loc].set_visible(False)
+    fig.tight_layout()
+
 
 # 2. How to compare stcs between 2 conds? atm I'm just plotting each of them separately ...
 #
