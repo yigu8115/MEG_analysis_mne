@@ -25,6 +25,7 @@ def reject_artefact(raw, l_freq, h_freq):
     epochs_ICA = mne.Epochs(
         raw_for_ICA, events_ICA, tmin=0.0, tmax=tstep, baseline=None, preload=True
     )
+    
     # use 'autoreject' to compute a threshold for removing large noise
     reject = get_rejection_threshold(epochs_ICA)
     reject # print the result
@@ -35,7 +36,7 @@ def reject_artefact(raw, l_freq, h_freq):
     # could also try Ransac
     #ransac = Ransac(verbose=True, n_jobs=1)
     #epochs_ICA_clean = ransac.fit_transform(epochs_ICA)
-
+    
     # run ICA
     ica = ICA(n_components=60, max_iter="auto", random_state=97)
     ica.fit(epochs_ICA, tstep=tstep) # 'reject' param here only works for continuous data, so we use drop_bad() above instead
@@ -50,10 +51,10 @@ def reject_artefact(raw, l_freq, h_freq):
     # https://mne.tools/stable/auto_tutorials/preprocessing/40_artifact_correction_ica.html#using-a-simulated-channel-to-select-ica-components
     # https://github.com/LanceAbel/MQ_MEG_Analysis (selecting channels to simulate EOG)
 
-    # apply component rejection onto raw (continuous) data
+    # Compare raw data before & after ICA
     raw.filter(l_freq=l_freq, h_freq=h_freq)
     raw.plot(n_channels=160, title='before ICA') # before IC rejection
-    ica.apply(raw)
-    raw.plot(n_channels=160, title='after ICA') # after IC rejection
+    raw_clean = ica.apply(raw) # apply component rejection onto raw (continuous) data
+    raw_clean.plot(n_channels=160, title='after ICA') # after IC rejection
     
-    return raw
+    return raw_clean
