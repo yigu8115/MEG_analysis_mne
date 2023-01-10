@@ -13,12 +13,13 @@
 # etc.
 
 '''
-# Put these in .bashrc, so they will be executed on startup (is there an equivalent for Mac?)
+# Put these commands in .bashrc, so they will be executed upon user login
 # https://surfer.nmr.mgh.harvard.edu/fswiki/FS7_wsl_ubuntu
-# (best not to be part of the script, as diff computers will have diff paths)
-export FREESURFER_HOME=/Applications/freesurfer # also need to add FS license
+# (best not to be part of the script, as different computers will have different paths)
+export FREESURFER_HOME=/usr/local/freesurfer/7-dev # path to your FS installation
+export FS_LICENSE=$HOME/Downloads/freesurfer/license.txt # path to FS license file
 source $FREESURFER_HOME/SetUpFreeSurfer.sh
-export SUBJECTS_DIR=/home/jzhu/analysis_mne/processing/mri/ 
+export SUBJECTS_DIR=$HOME/analysis_mne/processing/mri/ 
 # output from recon-all will be stored here (each subject will have its own subfolder)
 # a number of mne functions will also use this to determine path (could also pass in each time explicitly, 
 # to avoid the need to rely on env var)
@@ -82,7 +83,7 @@ filters_fname = save_dir + subject_MEG + meg_task + "-filters-lcmv.h5"
 filters_vec_fname = save_dir + subject_MEG + meg_task + "-filters_vec-lcmv.h5"
 
 
-# adjust mne options to fix rendering issues in Linux / WSL (not needed in Windows)
+# adjust mne options to fix rendering issues (only needed in Linux / WSL)
 mne.viz.set_3d_options(antialias = 0, depth_peeling = 0) 
 
 
