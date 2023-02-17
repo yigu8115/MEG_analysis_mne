@@ -69,7 +69,7 @@ raw = mne.io.read_raw_kit(
 )
 
 # Filtering & ICA
-raw = my_preprocessing.reject_artefact(raw, 0.1, 40)
+raw = my_preprocessing.reject_artefact(raw, 0.1, 40, 1)
 
 
 #%% === Trigger detection & timing correction === #
@@ -99,7 +99,8 @@ for idx, event in enumerate(std_dev_bool):
         events[idx, 2] = 2 # code current trial as '2'
         if events[idx - 1, 2] != 2:
             events[idx - 1, 2] = 1 # code previous trial as '1'
-# specify the event_ids dict (for epoching)
+
+# specify the event IDS (these will be used during epoching)
 event_ids = {
     "standard": 1,
     "deviant": 2,
@@ -124,7 +125,6 @@ stim_tps = np.load(save_dir + 'audio_channel_triggers.npy')
 # Opt 2: use getEnvelope function
 
 def getEnvelope(inputSignal):
-
     # Taking the absolute value
     absoluteSignal = []
     for sample in inputSignal:
@@ -132,7 +132,7 @@ def getEnvelope(inputSignal):
     absoluteSignal = absoluteSignal[0]
 
     # Peak detection
-    intervalLength = 5  # Experiment with this number
+    intervalLength = 5  # Experiment with this number!
     outputSignal = []
 
     # Like a sample and hold filter
@@ -183,9 +183,9 @@ plt.show()
 events_corrected = copy.copy(events) # work on a copy so we don't affect the original
 
 # Missing AD triggers can be handled:
-# if there's an AD trigger within 100-200ms after trigger channel (this ensures 
+# if there's an AD trigger between 100-200ms after normal trigger (this ensures 
 # we've got the correct trial), update to AD timing;
-# if there's no AD trigger within this time range, discard the trial
+# if there's no AD trigger in this time range, discard the trial
 AD_delta = []
 missing = [] # keep track of the trials to discard (due to missing AD trigger)
 for i in range(events.shape[0]):
