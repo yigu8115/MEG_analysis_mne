@@ -21,9 +21,9 @@ from autoreject.utils import interpolate_bads  # noqa
 import my_preprocessing
 
 # set up file and folder paths here
-exp_dir = "/home/jzhu/analysis_mne/"
-subject_MEG = 'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_normal'; #'_TSPCA' #'_1_oddball' #''
+exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
+subject_MEG = 'Pilot01'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+meg_task = '_localiser'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
@@ -31,6 +31,7 @@ processing_dir = exp_dir + "processing/"
 meg_dir = data_dir + subject_MEG + "/meg/"
 save_dir = processing_dir + "meg/" + subject_MEG + "/"
 epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
+os.system('mkdir -p ' + save_dir) # create the folder if needed
 
 
 #%% === Read raw data === #
@@ -220,13 +221,13 @@ mne.viz.plot_compare_evokeds(
 
 #%% === Make alternative plots === #
 
-normal = mne.read_epochs(save_dir + subject_MEG + "_normal-epo.fif")
-gopro = mne.read_epochs(save_dir + subject_MEG + "_with_gopro_on_eyetracker-epo.fif")
+normal = mne.read_epochs(save_dir + subject_MEG + "_withoutGoPro_localiser-epo.fif")
+gopro = mne.read_epochs(save_dir + subject_MEG + "_localiser-epo.fif")
 
 # plot 'da' only (normal vs with_gopro)
 mne.viz.plot_compare_evokeds(
     [
-        normal["da"].average(),
-        gopro["da"].average(),
+        normal["ba"].average(),
+        gopro["ba"].average(),
     ]
 )

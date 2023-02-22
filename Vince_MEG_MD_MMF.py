@@ -42,6 +42,7 @@ processing_dir = exp_dir + "processing/"
 meg_dir = data_dir + subject_MEG + "/meg/"
 save_dir = processing_dir + "meg/" + subject_MEG + "/"
 epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
+os.system('mkdir -p ' + save_dir) # create the folder if needed
 
 
 #%% === Read raw data === #
