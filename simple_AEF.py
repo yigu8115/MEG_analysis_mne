@@ -22,8 +22,8 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'Pilot01'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_localiser'; #'_TSPCA' #'_1_oddball' #''
+subject_MEG = 'Pilot02'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+meg_task = '_localiser_gopro'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
@@ -155,13 +155,13 @@ plt.show()
 events_corrected = copy.copy(events) # work on a copy so we don't affect the original
 
 # Missing AD triggers can be handled:
-# if there's an AD trigger within 100ms on each side of the normal trigger
+# if there's an AD trigger within 60ms following the normal trigger
 # (this ensures we've got the correct trial), update to AD timing;
 # if there's no AD trigger in this time range, discard the trial
 AD_delta = []
 missing = [] # keep track of the trials to discard (due to missing AD trigger)
 for i in range(events.shape[0]):
-    idx = np.where((stim_tps > events[i,0]-100) & (stim_tps < events[i,0]+100))
+    idx = np.where((stim_tps >= events[i,0]) & (stim_tps < events[i,0]+60))
     if len(idx[0]): # if an AD trigger exists within 200ms of trigger channel
         idx = idx[0][0] # use the first AD trigger (if there are multiple)
         AD_delta.append(stim_tps[idx] - events[i,0]) # keep track of audio delay values (for histogram)
@@ -221,13 +221,13 @@ mne.viz.plot_compare_evokeds(
 
 #%% === Make alternative plots === #
 
-normal = mne.read_epochs(save_dir + subject_MEG + "_withoutGoPro_localiser-epo.fif")
-gopro = mne.read_epochs(save_dir + subject_MEG + "_localiser-epo.fif")
+normal = mne.read_epochs(save_dir + subject_MEG + "_localiser_normal-epo.fif")
+gopro = mne.read_epochs(save_dir + subject_MEG + "_localiser_gopro-epo.fif")
 
 # plot 'da' only (normal vs with_gopro)
 mne.viz.plot_compare_evokeds(
     [
-        normal["ba"].average(),
-        gopro["ba"].average(),
+        normal["da"].average(),
+        gopro["da"].average(),
     ]
 )
