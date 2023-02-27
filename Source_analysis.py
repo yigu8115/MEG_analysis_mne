@@ -59,28 +59,43 @@ subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_TSPCA' #'_1_oddball' #''
 
 # specify a name for this run (to save intermediate processing files)
-run_name = "beamformer" #"beamformer_for_RNN_comparison"
+run_name = "beamformer"
+#run_name = "beamformer_for_RNN_comparison"
+
+# for RNN we need a sparse source space, specify the spacing below (pos)
+if (run_name == "beamformer_for_RNN_comparison"):
+    #pos = 30 # use 30mm spacing -> produces about 54 vertices
+    #suffix = "54-sources"   
+    pos = 52.3 # use 52.3mm spacing -> produces about 12 vertices
+    suffix = "12-sources"            
+else: # for normal source analysis
+    pos = 5 # default is 5mm -> produces more than 10000 vertices
+    suffix = ""
 
 # set to False if you just want to run the whole script & save results
 SHOW_PLOTS = False 
 
 
-# the paths below should be automatic
-data_dir = exp_dir + "data/"
-meg_dir = data_dir + subject_MEG + "/meg/"
-processing_dir = exp_dir + "processing/"
-subjects_dir = processing_dir + "mri/"
+# All paths below should be automatic
 
-base_fname = processing_dir + "meg/" + subject_MEG + "/" + subject_MEG + meg_task
+data_dir = op.join(exp_dir, "data")
+meg_dir = op.join(data_dir, subject_MEG, "meg")
+processing_dir = op.join(exp_dir, "processing")
+subjects_dir = op.join(processing_dir, "mri")
+inner_skull = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
+# we'll use volumetric source space by default (i.e. works for beamformer)
+src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + suffix + "_vol-src.fif")
+
+base_fname = op.join(processing_dir, "meg", subject_MEG, subject_MEG + meg_task)
 raw_fname = base_fname + "_emptyroom-raw.fif" #"-raw.fif" 
 # just use empty room recording for kit2fiff (embedding hsp for coreg) & for mne.io.read_info()
 trans_fname = base_fname + "-trans.fif"
 epochs_fname = base_fname + "-epo.fif"
 
-save_dir = processing_dir + "meg/" + subject_MEG + "/" + run_name + "/"
-fwd_fname = save_dir + subject_MEG + "-fwd.fif"
-filters_fname = save_dir + subject_MEG + meg_task + "-filters-lcmv.h5"
-filters_vec_fname = save_dir + subject_MEG + meg_task + "-filters_vec-lcmv.h5"
+save_dir = op.join(processing_dir, "meg", subject_MEG, run_name, suffix)
+fwd_fname = op.join(save_dir, subject_MEG + "-fwd.fif")
+filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
+filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
 
 
 # adjust mne options to fix rendering issues (only needed in Linux / WSL)
@@ -94,7 +109,7 @@ mne.viz.set_3d_options(antialias = 0, depth_peeling = 0)
 # ===== Compute head surfaces ===== #
 
 # Note: these commands require both MNE & Freesurfer
-if not op.exists(subjects_dir + subject + '/bem/inner_skull.surf'): # check one of the target files to see if these steps have been run already
+if not op.exists(inner_skull): # check one of the target files to see if these steps have been run already
     os.system('mne make_scalp_surfaces --overwrite -s ' + subject + ' -d ' + subjects_dir + ' --force')
     os.system('mne watershed_bem -s ' + subject + ' -d ' + subjects_dir)
     os.system('mne setup_forward_model -s ' + subject + ' -d ' + subjects_dir + ' --homog --ico 4')
@@ -122,10 +137,10 @@ if SHOW_PLOTS:
 # So, convert the confile to FIF format first (to embed mrk & hsp), which can then be loaded during coreg.
 # (Note: to save disk space, we just use the empty room confile here!)
 if not op.exists(raw_fname):
-    file_raw = glob.glob(meg_dir + "*empty*.con")
-    file_elp = glob.glob(meg_dir + "*.elp")
-    file_hsp = glob.glob(meg_dir + "*.hsp")
-    file_mrk = glob.glob(meg_dir + "*.mrk")
+    file_raw = glob.glob(op.join(meg_dir, "*empty*.con"))
+    file_elp = glob.glob(op.join(meg_dir, "*.elp"))
+    file_hsp = glob.glob(op.join(meg_dir, "*.hsp"))
+    file_mrk = glob.glob(op.join(meg_dir, "*.mrk"))
     os.system('mne kit2fiff --input ' + file_raw[0] + ' --output ' + raw_fname + 
     ' --mrk ' + file_mrk[0] + ' --elp ' + file_elp[0] + ' --hsp ' + file_hsp[0])
 
@@ -211,18 +226,12 @@ mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
 '''
 
 # create volume source space using grid spacing (bounded by the bem)
-src_fname = op.join(subjects_dir, subject, "bem", subject + "_vol-src.fif")
 if op.exists(src_fname):
     src = mne.read_source_spaces(src_fname)
 else:
-    surface = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
-    if (run_name == "beamformer_for_RNN_comparison"): # use a more sparse source space
-        pos = 30 # use 30mm spacing -> produces about 54 vertices               
-    else:
-        pos = 5 # (default is 5mm -> produces more than 10000 vertices)
     src = mne.setup_volume_source_space(
         subject, subjects_dir=subjects_dir, pos=pos, 
-        surface=surface, add_interpolator=True
+        surface=inner_skull, add_interpolator=True
     )
     # save to mri folder
     mne.write_source_spaces(src_fname, src)
@@ -289,7 +298,9 @@ fwd = mne.convert_forward_solution(
 # we can explore the content of fwd to access the numpy array that contains the leadfield matrix
 leadfield = fwd["sol"]["data"]
 print("Leadfield size (free orientation): %d sensors x %d dipoles" % leadfield.shape)
-
+# can save a copy of the leadfield
+np.save(op.join(save_dir, 'leadfield.npy'), leadfield)
+        
 # Forward computation can remove vertices that are too close to (or outside) the inner skull surface,
 # so always use fwd["src"] (rather than just src) when passing to other functions.
 # Let's compare before & after to see if any vertices were removed:
@@ -320,24 +331,29 @@ evokeds = []
 for cond in epochs.event_id:
     evokeds.append(epochs[cond].average())
 
-# compute cov matrices
-data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.4,
-                                  method='empirical')
-noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
-                                   method='empirical')
-#data_cov.plot(epochs.info)
-#del epochs
+# create the spatial filter
+if op.exists(filters_fname) & op.exists(filters_vec_fname):
+    filters = mne.beamformer.read_beamformer(filters_fname)
+    filters_vec = mne.beamformer.read_beamformer(filters_vec_fname)
+else:
+    # compute cov matrices
+    data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.4,
+                                    method='empirical')
+    noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
+                                    method='empirical')
+    #data_cov.plot(epochs.info)
+    #del epochs
 
-# compute the spatial filter (LCMV beamformer) - use common filter for all conds?
-filters = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
-                    noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
-                    weight_norm='unit-noise-gain', rank=None)
-filters_vec = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
-                        noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
+    # compute the spatial filter (LCMV beamformer) - use common filter for all conds?
+    filters = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
+                        noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
                         weight_norm='unit-noise-gain', rank=None)
-# save the filters for later (but how to load?)
-#filters.save(filters_fname, overwrite=True)
-#filters_vec.save(filters_vec_fname, overwrite=True)
+    filters_vec = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
+                            noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
+                            weight_norm='unit-noise-gain', rank=None)
+    # save the filters for later
+    filters.save(filters_fname, overwrite=True)
+    filters_vec.save(filters_vec_fname, overwrite=True)
 
 # apply the spatial filter (to get reconstructed source activity)
 stcs = dict()
@@ -349,7 +365,7 @@ for index, evoked in enumerate(evokeds):
 
     # can save the source timecourses (vertices x samples) as numpy array file
     stcs_vec[cond].data.shape
-    np.save(save_dir + "vec_" + cond + ".npy", stcs_vec[cond].data)
+    np.save(op.join(save_dir, "vec_" + cond + ".npy"), stcs_vec[cond].data)
 
     ## use the stcs_vec structure but swap in the results from RNN
     # std_rnn_sources = np.load('standard_rnn_reshaped.npy')
@@ -384,7 +400,7 @@ for index, evoked in enumerate(evokeds):
 # https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html#volume-source-estimates
 
 # choose atlas for parcellation
-fname_aseg = subjects_dir + subject + '/mri/aparc.a2009s+aseg.mgz'
+fname_aseg = op.join(subjects_dir, subject, 'mri', 'aparc.a2009s+aseg.mgz')
 rois = ['ctx_rh_G_temp_sup-Lateral']  # can have multiple labels in this list
 
 #label_names = mne.get_volume_labels_from_aseg(fname_aseg)
