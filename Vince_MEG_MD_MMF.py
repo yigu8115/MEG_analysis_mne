@@ -190,7 +190,7 @@ events_corrected = copy.copy(events) # work on a copy so we don't affect the ori
 AD_delta = []
 missing = [] # keep track of the trials to discard (due to missing AD trigger)
 for i in range(events.shape[0]):
-    idx = np.where((stim_tps > events[i,0]+100) & (stim_tps <= events[i,0]+200))
+    idx = np.where((stim_tps > events[i,0]) & (stim_tps <= events[i,0]+200))
     if len(idx[0]): # if an AD trigger exists within 200ms of trigger channel
         idx = idx[0][0] # use the first AD trigger (if there are multiple)
         AD_delta.append(stim_tps[idx] - events[i,0]) # keep track of audio delay values (for histogram)
