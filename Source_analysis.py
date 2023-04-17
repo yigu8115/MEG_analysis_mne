@@ -53,10 +53,10 @@ from mne.beamformer import make_lcmv, apply_lcmv
 
 
 # set up file and folder paths here
-exp_dir = "/home/jzhu/analysis_mne/"
-subject = 'MMN_test' #'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
-subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_TSPCA' #'_1_oddball' #''
+exp_dir = '/mnt/d/Work/analysis_ME206/' #'/home/jzhu/analysis_mne/'
+subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
+subject_MEG = 'G02' #'220112_p003' #'FTD0185_MEG1441'
+meg_task = '_localiser' #'_TSPCA' #'_1_oddball' #''
 
 # specify a name for this run (to save intermediate processing files)
 run_name = "beamformer"
@@ -83,16 +83,17 @@ meg_dir = op.join(data_dir, subject_MEG, "meg")
 processing_dir = op.join(exp_dir, "processing")
 subjects_dir = op.join(processing_dir, "mri")
 inner_skull = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
+src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + suffix + "_vol-src.fif") 
 # we'll use volumetric source space by default (i.e. works for beamformer)
-src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + suffix + "_vol-src.fif")
 
-base_fname = op.join(processing_dir, "meg", subject_MEG, subject_MEG + meg_task)
-raw_fname = base_fname + "_emptyroom-raw.fif" #"-raw.fif" 
+subject_dir_meg = op.join(processing_dir, "meg", subject_MEG)
+raw_fname = op.join(subject_dir_meg, subject_MEG + "_emptyroom-raw.fif") #"-raw.fif" 
 # just use empty room recording for kit2fiff (embedding hsp for coreg) & for mne.io.read_info()
-trans_fname = base_fname + "-trans.fif"
-epochs_fname = base_fname + "-epo.fif"
+trans_fname = op.join(subject_dir_meg, subject_MEG + "-trans.fif")
+epochs_fname = op.join(subject_dir_meg, subject_MEG + meg_task + "-epo.fif")
 
-save_dir = op.join(processing_dir, "meg", subject_MEG, run_name, suffix)
+save_dir = op.join(subject_dir_meg, run_name, suffix)
+os.system('mkdir -p ' + save_dir) # create the folder if needed
 fwd_fname = op.join(save_dir, subject_MEG + "-fwd.fif")
 filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
 filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
@@ -299,7 +300,8 @@ fwd = mne.convert_forward_solution(
 leadfield = fwd["sol"]["data"]
 print("Leadfield size (free orientation): %d sensors x %d dipoles" % leadfield.shape)
 # can save a copy of the leadfield
-np.save(op.join(save_dir, 'leadfield.npy'), leadfield)
+if (run_name == "beamformer_for_RNN_comparison"):
+    np.save(op.join(save_dir, 'leadfield.npy'), leadfield)
         
 # Forward computation can remove vertices that are too close to (or outside) the inner skull surface,
 # so always use fwd["src"] (rather than just src) when passing to other functions.
@@ -323,6 +325,7 @@ src = fwd["src"]
 
 # Run sensor-space analysis script to obtain the epochs (or read from saved file)
 epochs = mne.read_epochs(epochs_fname)
+#epochs = epochs.apply_baseline((None, 0.)) # this is redundant as baseline correction was applied by default when constructing the mne.epochs object
 evoked_allconds = epochs.average()
 #evoked_allconds.plot_joint() # average ERF across all conds
 
@@ -364,8 +367,9 @@ for index, evoked in enumerate(evokeds):
     stcs_vec[cond] = apply_lcmv(evoked, filters_vec) # timecourses contain both positive & negative values
 
     # can save the source timecourses (vertices x samples) as numpy array file
-    stcs_vec[cond].data.shape
-    np.save(op.join(save_dir, "vec_" + cond + ".npy"), stcs_vec[cond].data)
+    if (run_name == "beamformer_for_RNN_comparison"):
+        stcs_vec[cond].data.shape
+        np.save(op.join(save_dir, "vec_" + cond + ".npy"), stcs_vec[cond].data)
 
     ## use the stcs_vec structure but swap in the results from RNN
     # std_rnn_sources = np.load('standard_rnn_reshaped.npy')
@@ -374,20 +378,26 @@ for index, evoked in enumerate(evokeds):
     # stcs_vec['deviant'].data = dev_rnn_sources
     
     # plot the source timecourses
-    if SHOW_PLOTS:
-        lims = [0.3, 0.45, 0.6] # set colour scale
-        kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
-                    initial_time=0.087)
-        brain = stcs_vec[cond].plot_3d(
-            clim=dict(kind='value', lims=lims), 
-            hemi='both', size=(600, 600),
-            #views=['sagittal'], # only show sag view
-            view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
-            brain_kwargs=dict(silhouette=True),
-            **kwargs)
+    fig = stcs_vec[cond].plot(src=src, 
+        subject=subject, subjects_dir=subjects_dir, verbose=True,
+        #mode='glass_brain',
+        initial_time=0.1)
+    fig.savefig(op.join(save_dir, subject_MEG + '_localiser-' + cond + '.png'))
+    # also see: https://mne.tools/dev/auto_examples/visualization/publication_figure.html
 
-    # combine stcs from 3 directions into 1 (all become positive values), 
-    # i.e. what the show_traces option gives you in stcs_vec[cond].plot_3d 
+    # 3d plot (heavy operation - can only do one plot at a time)
+    kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
+        initial_time=0.1)
+    brain = stcs_vec[cond].plot_3d(
+        #clim=dict(kind='value', lims=[0.3, 0.45, 0.6]), # set colour scale
+        hemi='both', size=(600, 600),
+        #views=['sagittal'], # only show sag view
+        view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
+        brain_kwargs=dict(silhouette=True),
+        **kwargs)
+
+    # to combine stcs from 3 directions into 1: (all become positive values, 
+    # i.e. what the show_traces option gives you in stcs_vec[cond].plot_3d)
     #stcs_vec[cond].magnitude().data
 
 
