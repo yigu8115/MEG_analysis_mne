@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Simple AEF analysis (for sanity check)
+# Simple AEF & AEP analysis (for sanity check)
 #
 # Authors: Paul Sowman, Judy Zhu
 
@@ -22,19 +22,23 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'Pilot02'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_localiser_gopro'; #'_TSPCA' #'_1_oddball' #''
+subject_MEG = 'G02'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+meg_task = '_localiser'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
 processing_dir = exp_dir + "processing/"
 meg_dir = data_dir + subject_MEG + "/meg/"
-save_dir = processing_dir + "meg/" + subject_MEG + "/"
-epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
-os.system('mkdir -p ' + save_dir) # create the folder if needed
+eeg_dir = data_dir + subject_MEG + "/eeg/"
+save_dir_meg = processing_dir + "meg/" + subject_MEG + "/"
+save_dir_eeg = processing_dir + "eeg/" + subject_MEG + "/"
+epochs_fname_meg = save_dir_meg + subject_MEG + meg_task + "-epo.fif"
+epochs_fname_eeg = save_dir_eeg + subject_MEG + meg_task + "-epo.fif"
+os.system('mkdir -p ' + save_dir_meg) # create the folder if needed
+os.system('mkdir -p ' + save_dir_eeg)
 
 
-#%% === Read raw data === #
+#%% === Read raw MEG data === #
 
 #print(glob.glob("*_oddball.con"))
 fname_raw = glob.glob(meg_dir + "*" + meg_task + ".con")
@@ -207,22 +211,81 @@ epochs_resampled = epochs.copy().resample(100, npad="auto")
 print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
 
 # save for later use (e.g. in Source_analysis script)
-epochs_resampled.save(epochs_fname)
+epochs_resampled.save(epochs_fname_meg)
 
 # plot ERFs
 mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
-mne.viz.plot_compare_evokeds(
+fig = mne.viz.plot_compare_evokeds(
     [
         epochs_resampled["ba"].average(),
         epochs_resampled["da"].average(),
     ]
 )
+fig[0].savefig(processing_dir + 'meg/' + subject_MEG + '_AEF.png')
+
+
+
+#%% === Analyse EEG data === #
+
+# Read raw EEG data
+fname_eeg = glob.glob(eeg_dir + "*" + meg_task + ".eeg")
+fname_vhdr = glob.glob(eeg_dir + "*" + meg_task + ".vhdr")
+raw_eeg = mne.io.read_raw_brainvision(fname_vhdr[0], preload=True)
+
+# Filtering & ICA
+raw_eeg = my_preprocessing.reject_artefact(raw_eeg, 1, 40, 0)
+
+# Browse the raw data
+raw_eeg.plot()
+
+
+# Find events embedded in data
+eeg_events, _ = mne.events_from_annotations(raw_eeg)
+#print(eeg_events[:5])
+eeg_events = np.delete(eeg_events, [0,1], 0) # remove first 2 triggers (new segment start & one extra trigger sent by PTB script)
+
+# specify the event IDs
+eeg_event_ids = {
+    "ba": 53,
+    "da": 54,
+}
+
+assert len(eeg_events) == len(AD_delta) # sanity check
+
+# Adjust trigger timing based on delay values from MEG data
+eeg_events_corrected = copy.copy(eeg_events) # work on a copy so we don't affect the original
+for i in range(len(eeg_events)):
+    eeg_events_corrected[i,0] += AD_delta[i] # update event timing
+
+
+# Epoch & calculate ERPs
+epochs_eeg = mne.Epochs(raw_eeg, eeg_events_corrected, event_id=eeg_event_ids, tmin=-0.1, tmax=0.41, preload=True)
+
+conds_we_care_about = ["ba", "da"]
+epochs_eeg.equalize_event_counts(conds_we_care_about)
+
+# downsample to 100Hz
+epochs_eeg_resampled = epochs_eeg.copy().resample(100, npad="auto")
+
+# save for later use
+epochs_eeg_resampled.save(epochs_fname_eeg)
+
+# plot ERPs
+mne.viz.plot_evoked(epochs_eeg_resampled.average(), gfp="only")
+fig = mne.viz.plot_compare_evokeds(
+    [
+        epochs_eeg_resampled["ba"].average(),
+        epochs_eeg_resampled["da"].average(),
+    ]
+)
+fig[0].savefig(processing_dir + 'eeg/' + subject_MEG + '_AEP.png')
+
 
 
 #%% === Make alternative plots === #
 
-normal = mne.read_epochs(save_dir + subject_MEG + "_localiser_normal-epo.fif")
-gopro = mne.read_epochs(save_dir + subject_MEG + "_localiser_gopro-epo.fif")
+normal = mne.read_epochs(save_dir_meg + subject_MEG + "_localiser_normal-epo.fif")
+gopro = mne.read_epochs(save_dir_meg + subject_MEG + "_localiser_gopro-epo.fif")
 
 # plot 'da' only (normal vs with_gopro)
 mne.viz.plot_compare_evokeds(
