@@ -22,7 +22,7 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'G02'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+subject_MEG = 'G03'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_localiser'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
@@ -159,13 +159,13 @@ plt.show()
 events_corrected = copy.copy(events) # work on a copy so we don't affect the original
 
 # Missing AD triggers can be handled:
-# if there's an AD trigger within 60ms following the normal trigger
+# if there's an AD trigger within 50ms following the normal trigger
 # (this ensures we've got the correct trial), update to AD timing;
 # if there's no AD trigger in this time range, discard the trial
 AD_delta = []
 missing = [] # keep track of the trials to discard (due to missing AD trigger)
 for i in range(events.shape[0]):
-    idx = np.where((stim_tps >= events[i,0]) & (stim_tps < events[i,0]+60))
+    idx = np.where((stim_tps >= events[i,0]) & (stim_tps < events[i,0]+50))
     if len(idx[0]): # if an AD trigger exists within 200ms of trigger channel
         idx = idx[0][0] # use the first AD trigger (if there are multiple)
         AD_delta.append(stim_tps[idx] - events[i,0]) # keep track of audio delay values (for histogram)
@@ -199,29 +199,29 @@ plt.ylim(ymax=np.ceil(maxfreq / 10) * 10 if maxfreq % 10 else maxfreq + 10)
 
 
 #%% === Epoching === #
+if not os.path.exists(epochs_fname_meg):
+    epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
 
-epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
+    conds_we_care_about = ["ba", "da"]
+    epochs.equalize_event_counts(conds_we_care_about)
 
-conds_we_care_about = ["ba", "da"]
-epochs.equalize_event_counts(conds_we_care_about)
+    # downsample to 100Hz
+    print("Original sampling rate:", epochs.info["sfreq"], "Hz")
+    epochs_resampled = epochs.copy().resample(100, npad="auto")
+    print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
 
-# downsample to 100Hz
-print("Original sampling rate:", epochs.info["sfreq"], "Hz")
-epochs_resampled = epochs.copy().resample(100, npad="auto")
-print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
+    # save for later use (e.g. in Source_analysis script)
+    epochs_resampled.save(epochs_fname_meg)
 
-# save for later use (e.g. in Source_analysis script)
-epochs_resampled.save(epochs_fname_meg)
-
-# plot ERFs
-mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
-fig = mne.viz.plot_compare_evokeds(
-    [
-        epochs_resampled["ba"].average(),
-        epochs_resampled["da"].average(),
-    ]
-)
-fig[0].savefig(processing_dir + 'meg/' + subject_MEG + '_AEF.png')
+    # plot ERFs
+    mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
+    fig = mne.viz.plot_compare_evokeds(
+        [
+            epochs_resampled["ba"].average(),
+            epochs_resampled["da"].average(),
+        ]
+    )
+    fig[0].savefig(processing_dir + 'meg/' + subject_MEG + '_AEF.png')
 
 
 
