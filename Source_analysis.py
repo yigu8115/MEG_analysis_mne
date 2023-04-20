@@ -55,7 +55,7 @@ from mne.beamformer import make_lcmv, apply_lcmv
 # set up file and folder paths here
 exp_dir = '/mnt/d/Work/analysis_ME206/' #'/home/jzhu/analysis_mne/'
 subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
-subject_MEG = 'G02' #'220112_p003' #'FTD0185_MEG1441'
+subject_MEG = 'G04' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_localiser' #'_TSPCA' #'_1_oddball' #''
 
 # specify a name for this run (to save intermediate processing files)
@@ -73,7 +73,7 @@ else: # for normal source analysis
     suffix = ""
 
 # set to False if you just want to run the whole script & save results
-SHOW_PLOTS = False 
+SHOW_PLOTS = True 
 
 
 # All paths below should be automatic
@@ -381,11 +381,12 @@ for index, evoked in enumerate(evokeds):
     fig = stcs_vec[cond].plot(src=src, 
         subject=subject, subjects_dir=subjects_dir, verbose=True,
         #mode='glass_brain',
-        initial_time=0.1)
+        initial_time=0.18)
     fig.savefig(op.join(save_dir, subject_MEG + '_localiser-' + cond + '.png'))
     # also see: https://mne.tools/dev/auto_examples/visualization/publication_figure.html
 
     # 3d plot (heavy operation - can only do one plot at a time)
+    '''
     kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
         initial_time=0.1)
     brain = stcs_vec[cond].plot_3d(
@@ -395,6 +396,7 @@ for index, evoked in enumerate(evokeds):
         view_layout='horizontal', views=['coronal', 'sagittal', 'axial'], # make a 3-panel figure showing all views
         brain_kwargs=dict(silhouette=True),
         **kwargs)
+    '''
 
     # to combine stcs from 3 directions into 1: (all become positive values, 
     # i.e. what the show_traces option gives you in stcs_vec[cond].plot_3d)
