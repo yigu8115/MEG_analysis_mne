@@ -22,7 +22,7 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'G03'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+subject_MEG = 'G01'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_localiser'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
@@ -212,16 +212,20 @@ if not os.path.exists(epochs_fname_meg):
 
     # save for later use (e.g. in Source_analysis script)
     epochs_resampled.save(epochs_fname_meg)
+    #epochs_resampled = mne.read_epochs(epochs_fname_meg)
 
     # plot ERFs
-    mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
-    fig = mne.viz.plot_compare_evokeds(
+    fig = epochs_resampled.average().plot(spatial_colors=True, gfp=True)
+    fig.savefig(processing_dir + 'meg/Figures/' + subject_MEG + '_AEF_butterfly.png')
+    
+    fig2 = mne.viz.plot_compare_evokeds(
         [
             epochs_resampled["ba"].average(),
             epochs_resampled["da"].average(),
-        ]
+        ],
+        #combine = 'mean' # combine channels by taking the mean (default is GFP)
     )
-    fig[0].savefig(processing_dir + 'meg/' + subject_MEG + '_AEF.png')
+    fig2[0].savefig(processing_dir + 'meg/Figures/' + subject_MEG + '_AEF_gfp.png')
 
 
 
@@ -269,16 +273,22 @@ epochs_eeg_resampled = epochs_eeg.copy().resample(100, npad="auto")
 
 # save for later use
 epochs_eeg_resampled.save(epochs_fname_eeg)
+#epochs_eeg_resampled = mne.read_epochs(epochs_fname_eeg)
 
 # plot ERPs
-mne.viz.plot_evoked(epochs_eeg_resampled.average(), gfp="only")
-fig = mne.viz.plot_compare_evokeds(
+fig = epochs_eeg_resampled.average().plot(spatial_colors=True, gfp=True)
+fig.savefig(processing_dir + 'eeg/Figures/' + subject_MEG + '_AEP_butterfly.png')
+# Note: it seems like channel locations are not available from vhdr file - you
+# need to specify these explicitly using epochs.set_montage()
+
+fig2 = mne.viz.plot_compare_evokeds(
     [
         epochs_eeg_resampled["ba"].average(),
         epochs_eeg_resampled["da"].average(),
-    ]
+    ],
+    #combine = 'mean' # combine channels by taking the mean (default is GFP)
 )
-fig[0].savefig(processing_dir + 'eeg/' + subject_MEG + '_AEP.png')
+fig2[0].savefig(processing_dir + 'eeg/Figures/' + subject_MEG + '_AEP_gfp.png')
 
 
 
