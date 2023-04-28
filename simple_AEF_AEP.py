@@ -23,25 +23,30 @@ import my_preprocessing
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
 subject_MEG = 'G07'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_localiser'; #'_TSPCA' #'_1_oddball' #''
+task = 'localiser'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
 processing_dir = exp_dir + "processing/"
 meg_dir = data_dir + subject_MEG + "/meg/"
 eeg_dir = data_dir + subject_MEG + "/eeg/"
-save_dir_meg = processing_dir + "meg/" + subject_MEG + "/"
+save_dir_meg = processing_dir + "meg/" + subject_MEG + "/" # where to save the epoch files for each subject
 save_dir_eeg = processing_dir + "eeg/" + subject_MEG + "/"
-epochs_fname_meg = save_dir_meg + subject_MEG + meg_task + "-epo.fif"
-epochs_fname_eeg = save_dir_eeg + subject_MEG + meg_task + "-epo.fif"
-os.system('mkdir -p ' + save_dir_meg) # create the folder if needed
+figures_dir_meg = processing_dir + 'meg/Figures/' + task + '/' # where to save the figures for all subjects
+figures_dir_eeg = processing_dir + 'eeg/Figures/' + task + '/'
+epochs_fname_meg = save_dir_meg + subject_MEG + "_" + task + "-epo.fif"
+epochs_fname_eeg = save_dir_eeg + subject_MEG + "_" + task + "-epo.fif"
+# create the folders if needed
+os.system('mkdir -p ' + save_dir_meg)
 os.system('mkdir -p ' + save_dir_eeg)
+os.system('mkdir -p ' + figures_dir_meg)
+os.system('mkdir -p ' + figures_dir_eeg)
 
 
 #%% === Read raw MEG data === #
 
 #print(glob.glob("*_oddball.con"))
-fname_raw = glob.glob(meg_dir + "*" + meg_task + ".con")
+fname_raw = glob.glob(meg_dir + "*" + task + ".con")
 fname_elp = glob.glob(meg_dir + "*.elp")
 fname_hsp = glob.glob(meg_dir + "*.hsp")
 fname_mrk = glob.glob(meg_dir + "*.mrk")
@@ -214,11 +219,11 @@ if not os.path.exists(epochs_fname_meg):
     epochs_resampled.save(epochs_fname_meg, overwrite=True)
 
 # plot ERFs
-if not os.path.exists(processing_dir + 'meg/Figures/' + subject_MEG + '_AEF_butterfly.png'):
+if not os.path.exists(figures_dir_meg + subject_MEG + '_AEF_butterfly.png'):
     epochs_resampled = mne.read_epochs(epochs_fname_meg)
 
     fig = epochs_resampled.average().plot(spatial_colors=True, gfp=True)
-    fig.savefig(processing_dir + 'meg/Figures/' + subject_MEG + '_AEF_butterfly.png')
+    fig.savefig(figures_dir_meg + subject_MEG + '_AEF_butterfly.png')
 
     fig2 = mne.viz.plot_compare_evokeds(
         [
@@ -227,15 +232,15 @@ if not os.path.exists(processing_dir + 'meg/Figures/' + subject_MEG + '_AEF_butt
         ],
         #combine = 'mean' # combine channels by taking the mean (default is GFP)
     )
-    fig2[0].savefig(processing_dir + 'meg/Figures/' + subject_MEG + '_AEF_gfp.png')
+    fig2[0].savefig(figures_dir_meg + subject_MEG + '_AEF_gfp.png')
 
 
 
 #%% === Analyse EEG data === #
 
 # Read raw EEG data
-fname_eeg = glob.glob(eeg_dir + "*" + meg_task + ".eeg")
-fname_vhdr = glob.glob(eeg_dir + "*" + meg_task + ".vhdr")
+fname_eeg = glob.glob(eeg_dir + "*" + task + ".eeg")
+fname_vhdr = glob.glob(eeg_dir + "*" + task + ".vhdr")
 raw_eeg = mne.io.read_raw_brainvision(fname_vhdr[0], preload=True)
 
 # set channel types explicitly as these are not read in automatically
@@ -285,11 +290,11 @@ if not os.path.exists(epochs_fname_eeg):
     epochs_eeg_resampled.save(epochs_fname_eeg, overwrite=True)
 
 # plot ERPs
-if not os.path.exists(processing_dir + 'eeg/Figures/' + subject_MEG + '_AEP_butterfly.png'):
+if not os.path.exists(figures_dir_eeg + subject_MEG + '_AEP_butterfly.png'):
     epochs_eeg_resampled = mne.read_epochs(epochs_fname_eeg)
 
     fig = epochs_eeg_resampled.average().plot(spatial_colors=True, gfp=True)
-    fig.savefig(processing_dir + 'eeg/Figures/' + subject_MEG + '_AEP_butterfly.png')
+    fig.savefig(figures_dir_eeg + subject_MEG + '_AEP_butterfly.png')
     # Note: it seems like channel locations are not available from vhdr file;
     # you need to specify these explicitly using epochs.set_montage()
 
@@ -300,7 +305,7 @@ if not os.path.exists(processing_dir + 'eeg/Figures/' + subject_MEG + '_AEP_butt
         ],
         #combine = 'mean' # combine channels by taking the mean (default is GFP)
     )
-    fig2[0].savefig(processing_dir + 'eeg/Figures/' + subject_MEG + '_AEP_gfp.png')
+    fig2[0].savefig(figures_dir_eeg + subject_MEG + '_AEP_gfp.png')
 
 
 
