@@ -50,20 +50,29 @@ import glob
 
 import mne
 from mne.beamformer import make_lcmv, apply_lcmv
+from mne.minimum_norm import make_inverse_operator, apply_inverse
 
 
 # set up file and folder paths here
 exp_dir = '/mnt/d/Work/analysis_ME206/' #'/home/jzhu/analysis_mne/'
 subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
-subject_MEG = 'G04' #'220112_p003' #'FTD0185_MEG1441'
+subject_MEG = 'G06' #'220112_p003' #'FTD0185_MEG1441'
 meg_task = '_localiser' #'_TSPCA' #'_1_oddball' #''
 
 # specify a name for this run (to save intermediate processing files)
-run_name = "beamformer"
+#run_name = "beamformer"
 #run_name = "beamformer_for_RNN_comparison"
+run_name = "mne"
+
+# type of source space (note: beamformer rqs volumetric source space)
+src_type = 'vol' #'surface'
+spacing = "oct6" # for 'surface' source space only
+                 # use a recursively subdivided octahedron: 4 for speed, 6 for real analyses
+if src_type != 'surface':
+    spacing = ''
 
 # for RNN we need a sparse source space, specify the spacing below (pos)
-if (run_name == "beamformer_for_RNN_comparison"):
+if run_name == "beamformer_for_RNN_comparison":
     #pos = 30 # use 30mm spacing -> produces about 54 vertices
     #suffix = "54-sources"   
     pos = 52.3 # use 52.3mm spacing -> produces about 12 vertices
@@ -83,18 +92,17 @@ meg_dir = op.join(data_dir, subject_MEG, "meg")
 processing_dir = op.join(exp_dir, "processing")
 subjects_dir = op.join(processing_dir, "mri")
 inner_skull = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
-src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + suffix + "_vol-src.fif") 
-# we'll use volumetric source space by default (i.e. works for beamformer)
+src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + suffix + "_" + spacing + src_type + "-src.fif") 
 
 subject_dir_meg = op.join(processing_dir, "meg", subject_MEG)
 raw_fname = op.join(subject_dir_meg, subject_MEG + "_emptyroom-raw.fif") #"-raw.fif" 
 # just use empty room recording for kit2fiff (embedding hsp for coreg) & for mne.io.read_info()
 trans_fname = op.join(subject_dir_meg, subject_MEG + "-trans.fif")
 epochs_fname = op.join(subject_dir_meg, subject_MEG + meg_task + "-epo.fif")
+fwd_fname = op.join(subject_dir_meg, subject_MEG + "_" + spacing + src_type + "-fwd.fif")
 
 save_dir = op.join(subject_dir_meg, run_name, suffix)
 os.system('mkdir -p ' + save_dir) # create the folder if needed
-fwd_fname = op.join(save_dir, subject_MEG + "-fwd.fif")
 filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
 filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
 
@@ -188,61 +196,35 @@ print(
 
 # ===== Create source space ===== #
 
-# Note: beamformers are usually computed in a volume source space (3rd option below), 
+# Note: beamformers are usually computed in a volume source space, 
 # because estimating only cortical surface activation can misrepresent the data
 # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html#the-forward-model
 
-# create source space from cortical surface (by selecting a subset of vertices)
-'''
-spacing = "oct4" # use a recursively subdivided octahedron: 4 for speed, 6 for real analyses
-src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + spacing + "-src.fif")
 if op.exists(src_fname):
     src = mne.read_source_spaces(src_fname)
 else:
-    src = mne.setup_source_space(
-        subject, spacing=spacing, add_dist="patch", subjects_dir=subjects_dir
-    )
-    # save to mri folder
-    mne.write_source_spaces(
-        src_fname, src
-    )
-    
-print(src)
-mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source points
-'''
+    if src_type == 'surface':
+        # create source space from cortical surface (by selecting a subset of vertices)
+        src = mne.setup_source_space(
+            subject, spacing=spacing, add_dist="patch", subjects_dir=subjects_dir
+        )
+    elif src_type == 'vol':
+        # create volume source space using grid spacing (bounded by the bem)
+        src = mne.setup_volume_source_space(
+            subject, subjects_dir=subjects_dir, pos=pos, 
+            surface=inner_skull, add_interpolator=True
+        )
 
-# create volume source space using grid spacing (in a sphere)
-'''
-sphere = (0, 0.0, 0.0, 0.09)
-src = mne.setup_volume_source_space(
-    subject,
-    subjects_dir=subjects_dir,
-    sphere=sphere,
-    sphere_units="m",
-    add_interpolator=False,  # just for speed!
-)
-
-print(src)
-mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
-'''
-
-# create volume source space using grid spacing (bounded by the bem)
-if op.exists(src_fname):
-    src = mne.read_source_spaces(src_fname)
-else:
-    src = mne.setup_volume_source_space(
-        subject, subjects_dir=subjects_dir, pos=pos, 
-        surface=inner_skull, add_interpolator=True
-    )
     # save to mri folder
     mne.write_source_spaces(src_fname, src)
-    
+
+
+# check the source space
 print(src)
 if SHOW_PLOTS:
-    mne.viz.plot_bem(src=src, **plot_bem_kwargs) # plot bem with source grid
+    mne.viz.plot_bem(src=src, **plot_bem_kwargs)
 
-
-# check alignment after creating source space
+# check alignment
 if SHOW_PLOTS:
     fig = mne.viz.plot_alignment(
         subject=subject,
@@ -320,8 +302,6 @@ src = fwd["src"]
 # (from both the "mri" and "meg" folders), but can skip 
 # the "-raw.fif" (if large) as we can just use the con file here
 
-# Tutorial:
-# https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
 
 # Run sensor-space analysis script to obtain the epochs (or read from saved file)
 epochs = mne.read_epochs(epochs_fname)
@@ -334,62 +314,102 @@ evokeds = []
 for cond in epochs.event_id:
     evokeds.append(epochs[cond].average())
 
-# create the spatial filter
-if op.exists(filters_fname) & op.exists(filters_vec_fname):
-    filters = mne.beamformer.read_beamformer(filters_fname)
-    filters_vec = mne.beamformer.read_beamformer(filters_vec_fname)
-else:
-    # compute cov matrices
-    data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.4,
-                                    method='empirical')
-    noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
-                                    method='empirical')
-    #data_cov.plot(epochs.info)
-    #del epochs
 
-    # compute the spatial filter (LCMV beamformer) - use common filter for all conds?
-    filters = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
-                        noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
-                        weight_norm='unit-noise-gain', rank=None)
-    filters_vec = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
-                            noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
-                            weight_norm='unit-noise-gain', rank=None)
-    # save the filters for later
-    filters.save(filters_fname, overwrite=True)
-    filters_vec.save(filters_vec_fname, overwrite=True)
-
-# apply the spatial filter (to get reconstructed source activity)
+# compute source timecourses
 stcs = dict()
 stcs_vec = dict()
+
+# which method to use?
+if run_name == 'mne':
+    # https://mne.tools/stable/auto_tutorials/inverse/30_mne_dspm_loreta.html
+
+    noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
+                                    method=['shrunk','empirical'])
+    #fig_cov, fig_spectra = mne.viz.plot_cov(noise_cov, info)
+
+    inverse_operator = make_inverse_operator(
+        evoked_allconds.info, fwd, noise_cov)
+
+    for index, evoked in enumerate(evokeds):
+        cond = evoked.comment
+
+        method = "MNE"
+        snr = 3.
+        lambda2 = 1. / snr ** 2
+        stcs[cond], residual = apply_inverse(evoked, inverse_operator, lambda2,
+                                    method=method, pick_ori=None,
+                                    return_residual=True, verbose=True)
+        
+else: # use beamformer
+    # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
+    
+    # create the spatial filter
+    if op.exists(filters_fname) & op.exists(filters_vec_fname):
+        filters = mne.beamformer.read_beamformer(filters_fname)
+        filters_vec = mne.beamformer.read_beamformer(filters_vec_fname)
+    else:
+        # compute cov matrices
+        data_cov = mne.compute_covariance(epochs, tmin=-0.01, tmax=0.4,
+                                        method='empirical')
+        noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
+                                        method='empirical')
+        #data_cov.plot(epochs.info)
+
+        # compute the spatial filter (LCMV beamformer) - use common filter for all conds?
+        filters = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
+                            noise_cov=noise_cov, pick_ori='max-power', # 1 estimate per voxel (only preserve the axis with max power)
+                            weight_norm='unit-noise-gain', rank=None)
+        filters_vec = make_lcmv(evoked_allconds.info, fwd, data_cov, reg=0.05,
+                                noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
+                                weight_norm='unit-noise-gain', rank=None)
+        # save the filters for later
+        filters.save(filters_fname, overwrite=True)
+        filters_vec.save(filters_vec_fname, overwrite=True)
+
+    # apply the spatial filter (to get reconstructed source activity)
+    for index, evoked in enumerate(evokeds):
+        cond = evoked.comment
+        stcs[cond] = apply_lcmv(evoked, filters) # timecourses contain both positive & negative values
+        stcs_vec[cond] = apply_lcmv(evoked, filters_vec) # timecourses contain both positive & negative values
+
+        # can save the source timecourses (vertices x samples) as numpy array file
+        if run_name == "beamformer_for_RNN_comparison":
+            stcs_vec[cond].data.shape
+            np.save(op.join(save_dir, "vec_" + cond + ".npy"), stcs_vec[cond].data)
+
+        ## use the stcs_vec structure but swap in the results from RNN
+        # stcs_vec['standard'].data = np.load('standard_rnn_reshaped.npy')
+        # stcs_vec['deviant'].data = np.load('deviant_rnn_reshaped.npy')
+        
+
+# Plot the source timecourses
 for index, evoked in enumerate(evokeds):
     cond = evoked.comment
-    stcs[cond] = apply_lcmv(evoked, filters) # timecourses contain both positive & negative values
-    stcs_vec[cond] = apply_lcmv(evoked, filters_vec) # timecourses contain both positive & negative values
 
-    # can save the source timecourses (vertices x samples) as numpy array file
-    if (run_name == "beamformer_for_RNN_comparison"):
-        stcs_vec[cond].data.shape
-        np.save(op.join(save_dir, "vec_" + cond + ".npy"), stcs_vec[cond].data)
+    # depending on the src type, it will create diff types of plots
+    if src_type == 'vol':
+        fig = stcs[cond].plot(src=src, 
+            subject=subject, subjects_dir=subjects_dir, verbose=True,
+            #mode='glass_brain',
+            initial_time=0.1)
+        fig.savefig(op.join(save_dir, subject_MEG + meg_task + '-' + cond + '.png'))
+        # also see: https://mne.tools/dev/auto_examples/visualization/publication_figure.html
 
-    ## use the stcs_vec structure but swap in the results from RNN
-    # std_rnn_sources = np.load('standard_rnn_reshaped.npy')
-    # dev_rnn_sources = np.load('deviant_rnn_reshaped.npy')
-    # stcs_vec['standard'].data = std_rnn_sources
-    # stcs_vec['deviant'].data = dev_rnn_sources
+    elif src_type == 'surface':    
+        vertno_max, time_max = stcs[cond].get_peak(hemi='rh')
+        surfer_kwargs = dict(
+            hemi='rh', subjects_dir=subjects_dir,
+            clim=dict(kind='value', lims=[8, 12, 15]), views='lateral',
+            initial_time=time_max, time_unit='s', size=(800, 800), smoothing_steps=10)
+        brain = stcs[cond].plot(**surfer_kwargs)
+        brain.add_foci(vertno_max, coords_as_verts=True, hemi='rh', color='blue',
+                    scale_factor=0.6, alpha=0.5)
     
-    # plot the source timecourses
-    fig = stcs_vec[cond].plot(src=src, 
-        subject=subject, subjects_dir=subjects_dir, verbose=True,
-        #mode='glass_brain',
-        initial_time=0.18)
-    fig.savefig(op.join(save_dir, subject_MEG + '_localiser-' + cond + '.png'))
-    # also see: https://mne.tools/dev/auto_examples/visualization/publication_figure.html
-
     # 3d plot (heavy operation - can only do one plot at a time)
     '''
     kwargs = dict(src=src, subject=subject, subjects_dir=subjects_dir, verbose=True,
         initial_time=0.1)
-    brain = stcs_vec[cond].plot_3d(
+    brain_3d = stcs[cond].plot_3d(
         #clim=dict(kind='value', lims=[0.3, 0.45, 0.6]), # set colour scale
         hemi='both', size=(600, 600),
         #views=['sagittal'], # only show sag view
