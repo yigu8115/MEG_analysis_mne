@@ -151,6 +151,7 @@ plt.plot(aud_ch_data_raw[0], 'b')
 #plt.plot(outputSignal, 'r')
 for i in range(events.shape[0]):
    plt.axvline(events[i,0], color='b', lw=2, ls='--')
+for i in range(stim_tps.shape[0]):
    plt.axvline(stim_tps[i], color='r', lw=2, ls='--')
 plt.xlim(test_time-span, test_time+span)
 plt.show()
