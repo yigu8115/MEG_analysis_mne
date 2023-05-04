@@ -9,10 +9,15 @@
 
 def reject_artefact(raw, l_freq, h_freq, do_ICA):
     import mne
+
+    # disable the following imports for now as they are throwing errors 
+    # after upgrading to mne v1.3.1
+    '''
     from mne.preprocessing import find_bad_channels_maxwell, ICA
     from autoreject import get_rejection_threshold  # noqa
     from autoreject import Ransac  # noqa
     from autoreject.utils import interpolate_bads  # noqa
+    '''
 
     if do_ICA:
         # filtering for ICA
