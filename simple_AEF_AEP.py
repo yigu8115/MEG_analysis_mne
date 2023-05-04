@@ -13,16 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import copy
 
-from mne.preprocessing import find_bad_channels_maxwell
-from autoreject import get_rejection_threshold  # noqa
-from autoreject import Ransac  # noqa
-from autoreject.utils import interpolate_bads  # noqa
-
 import my_preprocessing
+
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'G07'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+subject_MEG = 'G08'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 task = 'localiser'; #'_TSPCA' #'_1_oddball' #''
 
 # the paths below should be automatic
@@ -170,7 +166,7 @@ events_corrected = copy.copy(events) # work on a copy so we don't affect the ori
 AD_delta = []
 missing = [] # keep track of the trials to discard (due to missing AD trigger)
 for i in range(events.shape[0]):
-    idx = np.where((stim_tps >= events[i,0]) & (stim_tps < events[i,0]+50))
+    idx = np.where((stim_tps >= events[i,0]-30) & (stim_tps < events[i,0]+50))
     if len(idx[0]): # if an AD trigger exists within 200ms of trigger channel
         idx = idx[0][0] # use the first AD trigger (if there are multiple)
         AD_delta.append(stim_tps[idx] - events[i,0]) # keep track of audio delay values (for histogram)
