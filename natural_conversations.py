@@ -8,6 +8,7 @@
 
 import os
 import mne
+import meegkit # for TSPCA
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,7 +20,7 @@ import my_preprocessing
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
 subject_MEG = 'G01';
-task = 'B1'; #'_TSPCA' #''
+task = 'B1' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
@@ -62,9 +63,35 @@ raw = mne.io.read_raw_kit(
     allow_unknown_format=False,
     verbose=True,
 )
-
 # Browse the raw data
 #raw.plot()
+
+
+# Apply TSPCA for noise reduction
+# https://github.com/pealco/python-meg-denoise/blob/master/example5.py
+noisy_data = raw.get_data(picks="meg").transpose()
+noisy_ref = raw.get_data(picks=[160,161,162]).transpose()
+#shifts = r_[-50:51]
+data_after_tspca, idx = meegkit.tspca.tsr(noisy_data, noisy_ref)[0:2]
+
+# check the results
+raw.plot()
+raw_clean = copy.deepcopy(raw)
+raw_clean._data[0:160] = data_after_tspca.transpose()
+raw_clean.plot()
+
+# compare TSPCA from MEG160 and from meegkit
+'''
+plt.figure()
+plt.plot(raw_MEG160.get_data(picks=14)[0], 'b')
+plt.plot(raw_clean.get_data(picks=14)[0], 'r')
+plt.xlim(100, 200)
+'''
+
+# can also try SSS:
+# https://mne.tools/stable/auto_tutorials/preprocessing/60_maxwell_filtering_sss.html
+# or DSS in the meegkit package
+
 
 # Filtering & ICA
 raw = my_preprocessing.reject_artefact(raw, 1, 10, 0)
