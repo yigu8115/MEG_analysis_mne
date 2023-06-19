@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Simple AEF & AEP analysis (for sanity check)
+# Analysis of natural conversations and repetitions
 #
 # Authors: Paul Sowman, Judy Zhu
 
@@ -165,7 +165,7 @@ plt.show()
 
 #%% === Epoching === #
 
-# cut into 2-second epochs
+# TODO: cut into 2-second epochs
 
 
 if not os.path.exists(epochs_fname_meg):
@@ -197,91 +197,3 @@ if not os.path.exists(figures_dir_meg + subject_MEG + '_AEF_butterfly.png'):
         #combine = 'mean' # combine channels by taking the mean (default is GFP)
     )
     fig2[0].savefig(figures_dir_meg + subject_MEG + '_AEF_gfp.png')
-
-
-
-#%% === Analyse EEG data === #
-
-# Read raw EEG data
-fname_eeg = glob.glob(eeg_dir + "*" + task + ".eeg")
-fname_vhdr = glob.glob(eeg_dir + "*" + task + ".vhdr")
-raw_eeg = mne.io.read_raw_brainvision(fname_vhdr[0], preload=True)
-
-# set channel types explicitly as these are not read in automatically
-raw_eeg.set_channel_types({'32': 'ecg', '63': 'eog'})
-
-# Filtering & ICA
-raw_eeg = my_preprocessing.reject_artefact(raw_eeg, 1, 40, 0)
-
-# Browse the raw data
-#raw_eeg.plot()
-
-
-# Find events embedded in data
-eeg_events, _ = mne.events_from_annotations(raw_eeg)
-#print(eeg_events[:5])
-
-# remove first 2 triggers (new segment start & one extra trigger sent by PTB script)
-eeg_events = np.delete(eeg_events, [0,1], 0) 
-if subject_MEG == 'G03':
-    eeg_events = np.delete(eeg_events, 198, 0) # MEG data is missing the final trigger, so remove it from EEG data too
-
-# specify the event IDs
-eeg_event_ids = {
-    "ba": 53,
-    "da": 54,
-}
-
-assert len(eeg_events) == len(AD_delta) # sanity check
-
-# Adjust trigger timing based on delay values from MEG data
-eeg_events_corrected = copy.copy(eeg_events) # work on a copy so we don't affect the original
-for i in range(len(eeg_events)):
-    eeg_events_corrected[i,0] += AD_delta[i] # update event timing
-
-
-# Epoching
-if not os.path.exists(epochs_fname_eeg):
-    epochs_eeg = mne.Epochs(raw_eeg, eeg_events_corrected, event_id=eeg_event_ids, tmin=-0.1, tmax=0.41, preload=True)
-
-    conds_we_care_about = ["ba", "da"]
-    epochs_eeg.equalize_event_counts(conds_we_care_about)
-
-    # downsample to 100Hz
-    epochs_eeg_resampled = epochs_eeg.copy().resample(100, npad="auto")
-
-    # save for later use
-    epochs_eeg_resampled.save(epochs_fname_eeg, overwrite=True)
-
-# plot ERPs
-if not os.path.exists(figures_dir_eeg + subject_MEG + '_AEP_butterfly.png'):
-    epochs_eeg_resampled = mne.read_epochs(epochs_fname_eeg)
-
-    fig = epochs_eeg_resampled.average().plot(spatial_colors=True, gfp=True)
-    fig.savefig(figures_dir_eeg + subject_MEG + '_AEP_butterfly.png')
-    # Note: it seems like channel locations are not available from vhdr file;
-    # you need to specify these explicitly using epochs.set_montage()
-
-    fig2 = mne.viz.plot_compare_evokeds(
-        [
-            epochs_eeg_resampled["ba"].average(),
-            epochs_eeg_resampled["da"].average(),
-        ],
-        #combine = 'mean' # combine channels by taking the mean (default is GFP)
-    )
-    fig2[0].savefig(figures_dir_eeg + subject_MEG + '_AEP_gfp.png')
-
-
-
-#%% === Make alternative plots === #
-
-normal = mne.read_epochs(save_dir_meg + subject_MEG + "_localiser_normal-epo.fif")
-gopro = mne.read_epochs(save_dir_meg + subject_MEG + "_localiser_gopro-epo.fif")
-
-# plot 'da' only (normal vs with_gopro)
-mne.viz.plot_compare_evokeds(
-    [
-        normal["da"].average(),
-        gopro["da"].average(),
-    ]
-)
