@@ -8,6 +8,7 @@
 
 import os
 import mne
+import meegkit
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,8 +19,9 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'G08'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-task = 'localiser'; #'_TSPCA' #'_1_oddball' #''
+subject_MEG = 'G16'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+task = 'localiser'; #'_1_oddball' #''
+run_name = '_TSPCA'
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
@@ -28,9 +30,9 @@ meg_dir = data_dir + subject_MEG + "/meg/"
 eeg_dir = data_dir + subject_MEG + "/eeg/"
 save_dir_meg = processing_dir + "meg/" + subject_MEG + "/" # where to save the epoch files for each subject
 save_dir_eeg = processing_dir + "eeg/" + subject_MEG + "/"
-figures_dir_meg = processing_dir + 'meg/Figures/' + task + '/' # where to save the figures for all subjects
+figures_dir_meg = processing_dir + 'meg/Figures/sensor/' + task + run_name + '/' # where to save the figures for all subjects
 figures_dir_eeg = processing_dir + 'eeg/Figures/' + task + '/'
-epochs_fname_meg = save_dir_meg + subject_MEG + "_" + task + "-epo.fif"
+epochs_fname_meg = save_dir_meg + subject_MEG + "_" + task + run_name + "-epo.fif"
 epochs_fname_eeg = save_dir_eeg + subject_MEG + "_" + task + "-epo.fif"
 # create the folders if needed
 os.system('mkdir -p ' + save_dir_meg)
@@ -63,8 +65,15 @@ raw = mne.io.read_raw_kit(
     verbose=True,
 )
 
-# Browse the raw data
-#raw.plot()
+# Apply TSPCA for noise reduction
+noisy_data = raw.get_data(picks="meg").transpose()
+noisy_ref = raw.get_data(picks=[160,161,162]).transpose()
+data_after_tspca, idx = meegkit.tspca.tsr(noisy_data, noisy_ref)[0:2]
+raw._data[0:160] = data_after_tspca.transpose()
+
+# browse data to identify bad sections & bad channels
+raw.plot()
+
 
 # Filtering & ICA
 raw = my_preprocessing.reject_artefact(raw, 1, 40, 0)
@@ -307,7 +316,7 @@ if not os.path.exists(figures_dir_eeg + subject_MEG + '_AEP_butterfly.png'):
 
 
 #%% === Make alternative plots === #
-
+'''
 normal = mne.read_epochs(save_dir_meg + subject_MEG + "_localiser_normal-epo.fif")
 gopro = mne.read_epochs(save_dir_meg + subject_MEG + "_localiser_gopro-epo.fif")
 
@@ -318,3 +327,4 @@ mne.viz.plot_compare_evokeds(
         gopro["da"].average(),
     ]
 )
+'''

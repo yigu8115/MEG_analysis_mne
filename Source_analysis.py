@@ -57,12 +57,13 @@ from mne.minimum_norm import make_inverse_operator, apply_inverse
 exp_dir = '/mnt/d/Work/analysis_ME206/' #'/home/jzhu/analysis_mne/'
 subject = 'fsaverage' #'FTD0185_MEG1441' # specify subject MRI or use template (e.g. fsaverage)
 subject_MEG = 'G06' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_localiser' #'_TSPCA' #'_1_oddball' #''
+meg_task = '_localiser' #'_1_oddball' #''
+run_name = '_TSPCA'
 
 # specify a name for this run (to save intermediate processing files)
-#run_name = "beamformer"
-#run_name = "beamformer_for_RNN_comparison"
-run_name = "mne"
+#source_method = "beamformer_TSPCA"
+#source_method = "beamformer_for_RNN_comparison"
+source_method = "mne"
 
 # type of source space (note: beamformer rqs volumetric source space)
 src_type = 'vol' #'surface'
@@ -72,7 +73,7 @@ if src_type != 'surface':
     spacing = ''
 
 # for RNN we need a sparse source space, specify the spacing below (pos)
-if run_name == "beamformer_for_RNN_comparison":
+if source_method == "beamformer_for_RNN_comparison":
     #pos = 30 # use 30mm spacing -> produces about 54 vertices
     #suffix = "54-sources"   
     pos = 52.3 # use 52.3mm spacing -> produces about 12 vertices
@@ -98,10 +99,11 @@ subject_dir_meg = op.join(processing_dir, "meg", subject_MEG)
 raw_fname = op.join(subject_dir_meg, subject_MEG + "_emptyroom-raw.fif") #"-raw.fif" 
 # just use empty room recording for kit2fiff (embedding hsp for coreg) & for mne.io.read_info()
 trans_fname = op.join(subject_dir_meg, subject_MEG + "-trans.fif")
-epochs_fname = op.join(subject_dir_meg, subject_MEG + meg_task + "-epo.fif")
+epochs_fname = op.join(subject_dir_meg, subject_MEG + meg_task + run_name + "-epo.fif")
 fwd_fname = op.join(subject_dir_meg, subject_MEG + "_" + spacing + src_type + "-fwd.fif")
 
-save_dir = op.join(subject_dir_meg, run_name, suffix)
+save_dir = op.join(subject_dir_meg, source_method + run_name, suffix)
+figures_dir = op.join(processing_dir, 'meg', 'Figures', 'source', meg_task[1:] + run_name, source_method) # where to save the figures for all subjects
 os.system('mkdir -p ' + save_dir) # create the folder if needed
 filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
 filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
@@ -282,7 +284,7 @@ fwd = mne.convert_forward_solution(
 leadfield = fwd["sol"]["data"]
 print("Leadfield size (free orientation): %d sensors x %d dipoles" % leadfield.shape)
 # can save a copy of the leadfield
-if (run_name == "beamformer_for_RNN_comparison"):
+if (source_method == "beamformer_for_RNN_comparison"):
     np.save(op.join(save_dir, 'leadfield.npy'), leadfield)
         
 # Forward computation can remove vertices that are too close to (or outside) the inner skull surface,
@@ -320,7 +322,7 @@ stcs = dict()
 stcs_vec = dict()
 
 # which method to use?
-if run_name == 'mne':
+if source_method == 'mne':
     # https://mne.tools/stable/auto_tutorials/inverse/30_mne_dspm_loreta.html
 
     noise_cov = mne.compute_covariance(epochs, tmin=-0.1, tmax=0,
@@ -363,8 +365,8 @@ else: # use beamformer
                                 noise_cov=noise_cov, pick_ori='vector', # 3 estimates per voxel, corresponding to the 3 axes
                                 weight_norm='unit-noise-gain', rank=None)
         # save the filters for later
-        filters.save(filters_fname, overwrite=True)
-        filters_vec.save(filters_vec_fname, overwrite=True)
+        #filters.save(filters_fname, overwrite=True)
+        #filters_vec.save(filters_vec_fname, overwrite=True)
 
     # apply the spatial filter (to get reconstructed source activity)
     for index, evoked in enumerate(evokeds):
@@ -373,7 +375,7 @@ else: # use beamformer
         stcs_vec[cond] = apply_lcmv(evoked, filters_vec) # timecourses contain both positive & negative values
 
         # can save the source timecourses (vertices x samples) as numpy array file
-        if run_name == "beamformer_for_RNN_comparison":
+        if source_method == "beamformer_for_RNN_comparison":
             stcs_vec[cond].data.shape
             np.save(op.join(save_dir, "vec_" + cond + ".npy"), stcs_vec[cond].data)
 
@@ -392,7 +394,7 @@ for index, evoked in enumerate(evokeds):
             subject=subject, subjects_dir=subjects_dir, verbose=True,
             #mode='glass_brain',
             initial_time=0.1)
-        fig.savefig(op.join(save_dir, subject_MEG + meg_task + '-' + cond + '.png'))
+        fig.savefig(op.join(figures_dir, subject_MEG + meg_task + run_name '-' + cond + '.png'))
         # also see: https://mne.tools/dev/auto_examples/visualization/publication_figure.html
 
     elif src_type == 'surface':    
