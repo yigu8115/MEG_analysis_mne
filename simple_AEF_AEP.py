@@ -19,7 +19,7 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME206/"; #"/home/jzhu/analysis_mne/"
-subject_MEG = 'G16'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
+subject_MEG = 'G20'; #'gopro_test'; #'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
 task = 'localiser'; #'_1_oddball' #''
 run_name = '_TSPCA'
 
@@ -110,7 +110,7 @@ events = np.delete(events, np.where(events[:, 2] == 166), 0)
 # get raw audio signal from ch166
 aud_ch_data_raw = raw.get_data(picks="MISC 007")
 
-def getEnvelope(inputSignal):
+def getEnvelope(inputSignal, thresh=0.2):
     # Taking the absolute value
     absoluteSignal = []
     for sample in inputSignal:
@@ -137,10 +137,13 @@ def getEnvelope(inputSignal):
     )
     # finally binarise the output at a threshold of 2.5  <-  adjust this 
     # threshold based on diagnostic plot below!
-    return np.array([1 if np.abs(x) > 0.2 else 0 for x in outputSignal])
+    return np.array([1 if np.abs(x) > thresh else 0 for x in outputSignal])
 
 #raw.load_data().apply_function(getEnvelope, picks="MISC 006")
-envelope = getEnvelope(aud_ch_data_raw)
+if subject_MEG == 'G22':
+    envelope = getEnvelope(aud_ch_data_raw, 3.5)
+else:
+    envelope = getEnvelope(aud_ch_data_raw)
 envelope = envelope.tolist() # convert ndarray to list
 # detect the beginning of each envelope (set the rest of the envelope to 0)
 new_stim_ch = np.clip(np.diff(envelope),0,1)
