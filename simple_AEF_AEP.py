@@ -26,12 +26,13 @@ run_name = '_TSPCA'
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
 processing_dir = exp_dir + "processing/"
+results_dir = exp_dir + "results/"
 meg_dir = data_dir + subject_MEG + "/meg/"
 eeg_dir = data_dir + subject_MEG + "/eeg/"
 save_dir_meg = processing_dir + "meg/" + subject_MEG + "/" # where to save the epoch files for each subject
 save_dir_eeg = processing_dir + "eeg/" + subject_MEG + "/"
-figures_dir_meg = processing_dir + 'meg/Figures/sensor/' + task + run_name + '/' # where to save the figures for all subjects
-figures_dir_eeg = processing_dir + 'eeg/Figures/' + task + '/'
+figures_dir_meg = results_dir + 'meg/sensor/' + task + run_name + '/Figures/' # where to save the figures for all subjects
+figures_dir_eeg = results_dir + 'eeg/sensor/' + task + '/Figures/'
 epochs_fname_meg = save_dir_meg + subject_MEG + "_" + task + run_name + "-epo.fif"
 epochs_fname_eeg = save_dir_eeg + subject_MEG + "_" + task + "-epo.fif"
 # create the folders if needed

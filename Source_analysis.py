@@ -98,6 +98,7 @@ for subject_MEG in subjects:
     data_dir = op.join(exp_dir, "data")
     meg_dir = op.join(data_dir, subject_MEG, "meg")
     processing_dir = op.join(exp_dir, "processing")
+    results_dir = op.join(exp_dir, "results")
     subjects_dir = op.join(processing_dir, "mri")
     inner_skull = op.join(subjects_dir, subject, "bem", "inner_skull.surf")
     src_fname = op.join(subjects_dir, subject, "bem", subject + "_" + suffix + "_" + spacing + src_type + "-src.fif") 
@@ -110,11 +111,13 @@ for subject_MEG in subjects:
     fwd_fname = op.join(subject_dir_meg, subject_MEG + "_" + spacing + src_type + "-fwd.fif")
 
     save_dir = op.join(subject_dir_meg, source_method + run_name, suffix)
-    figures_dir = op.join(processing_dir, 'meg', 'Figures', 'source', meg_task[1:] + run_name, source_method) # where to save the figures for all subjects
     #os.system('mkdir -p ' + save_dir) # create the folder if needed
-    filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
-    filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
-
+    #filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
+    #filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
+    source_results_dir = op.join(results_dir, 'meg', 'source', meg_task[1:] + run_name, source_method)
+    stcs_filename = op.join(source_results_dir, subject_MEG)
+    figures_dir = op.join(source_results_dir, 'Figures') # where to save the figures for all subjects
+    
 
     # adjust mne options to fix rendering issues (only needed in Linux / WSL)
     mne.viz.set_3d_options(antialias = False, depth_peeling = False, 
