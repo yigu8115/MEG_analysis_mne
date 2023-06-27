@@ -59,7 +59,7 @@ meg_task = '_localiser' #'_1_oddball' #''
 run_name = '_TSPCA'
 
 # specify a name for this run (to save intermediate processing files)
-source_method = "beamformer"
+source_method = "mne"
 #source_method = "beamformer_for_RNN_comparison"
 #source_method = "mne"
 
@@ -85,7 +85,7 @@ SHOW_PLOTS = False
 
 
 # specify which subjects to analyse
-subjects = ['G11','G13','G14','G15','G16','G17','G18','G19','G20','G21','G22']
+subjects = ['G01','G02','G03','G04','G05','G06','G07','G08','G09','G10']
 
 for subject_MEG in subjects:
 
@@ -112,10 +112,11 @@ for subject_MEG in subjects:
 
     save_dir = op.join(subject_dir_meg, source_method + run_name, suffix)
     #os.system('mkdir -p ' + save_dir) # create the folder if needed
-    #filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
-    #filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
+    filters_fname = op.join(save_dir, subject_MEG + meg_task + "-filters-lcmv.h5")
+    filters_vec_fname = op.join(save_dir, subject_MEG + meg_task + "-filters_vec-lcmv.h5")
     source_results_dir = op.join(results_dir, 'meg', 'source', meg_task[1:] + run_name, source_method)
     stcs_filename = op.join(source_results_dir, subject_MEG)
+    stcs_vec_filename = op.join(source_results_dir, subject_MEG + '_vec')
     figures_dir = op.join(source_results_dir, 'Figures') # where to save the figures for all subjects
     
 
@@ -354,7 +355,10 @@ for subject_MEG in subjects:
             stcs[cond], residual = apply_inverse(evoked, inverse_operator, lambda2,
                                         method=method, pick_ori=None,
                                         return_residual=True, verbose=True)
-            
+ 
+            # save the source estimates
+            stcs[cond].save(stcs_filename + '-' + cond)
+
     else: # use beamformer
         # https://mne.tools/stable/auto_tutorials/inverse/50_beamformer_lcmv.html
         
@@ -387,6 +391,10 @@ for subject_MEG in subjects:
             stcs[cond] = apply_lcmv(evoked, filters) # timecourses contain both positive & negative values
             stcs_vec[cond] = apply_lcmv(evoked, filters_vec) # timecourses contain both positive & negative values
 
+            # save the source estimates
+            stcs[cond].save(stcs_filename + '-' + cond)        
+            stcs_vec[cond].save(stcs_vec_filename + '-' + cond)
+
             # can save the source timecourses (vertices x samples) as numpy array file
             if source_method == "beamformer_for_RNN_comparison":
                 stcs_vec[cond].data.shape
@@ -395,8 +403,8 @@ for subject_MEG in subjects:
             ## use the stcs_vec structure but swap in the results from RNN
             # stcs_vec['standard'].data = np.load('standard_rnn_reshaped.npy')
             # stcs_vec['deviant'].data = np.load('deviant_rnn_reshaped.npy')
-            
 
+    
     # Plot the source timecourses
     for index, evoked in enumerate(evokeds):
         cond = evoked.comment
@@ -436,6 +444,7 @@ for subject_MEG in subjects:
         # to combine stcs from 3 directions into 1: (all become positive values, 
         # i.e. what the show_traces option gives you in stcs_vec[cond].plot_3d)
         #stcs_vec[cond].magnitude().data
+    
 
     '''
     # Q: 
@@ -503,3 +512,8 @@ for subject_MEG in subjects:
     # Plotting stcs:
     # https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html
     '''
+
+
+    # Grand average of source estimates
+    #TODO: read in the saved .stc files for all subjects, then take the mean
+    # (can't use mne.grand_average, as that only works for Evoked or TFR objects)
