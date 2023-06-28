@@ -60,8 +60,8 @@ run_name = '_TSPCA'
 
 # specify a name for this run (to save intermediate processing files)
 source_method = "mne"
+#source_method = "beamformer"
 #source_method = "beamformer_for_RNN_comparison"
-#source_method = "mne"
 
 # type of source space (note: beamformer rqs volumetric source space)
 src_type = 'vol' #'surface'
@@ -505,15 +505,11 @@ for subject_MEG in subjects:
 
 
     # 2. How to compare stcs between 2 conds? atm I'm just plotting each of them separately ...
-    #
-    # Compare evoked response across conds (can do the same to compare stcs?)
+    # https://mne.tools/stable/auto_tutorials/stats-source-space/20_cluster_1samp_spatiotemporal.html
+
+    # Compare evoked response across conds (can prob do the same for stcs)
     # https://mne.tools/stable/auto_examples/visualization/topo_compare_conditions.html
     #
     # Plotting stcs:
     # https://mne.tools/stable/auto_tutorials/inverse/60_visualize_stc.html
     '''
-
-
-    # Grand average of source estimates
-    #TODO: read in the saved .stc files for all subjects, then take the mean
-    # (can't use mne.grand_average, as that only works for Evoked or TFR objects)
