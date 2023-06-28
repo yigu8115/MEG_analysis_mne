@@ -77,7 +77,7 @@ raw.plot()
 
 
 # Filtering & ICA
-raw = my_preprocessing.reject_artefact(raw, 1, 40, 0)
+raw = my_preprocessing.reject_artefact(raw, 1, 40, False, '')
 
 
 #%% === Trigger detection & timing correction === #
@@ -257,7 +257,7 @@ raw_eeg = mne.io.read_raw_brainvision(fname_vhdr[0], preload=True)
 raw_eeg.set_channel_types({'32': 'ecg', '63': 'eog'})
 
 # Filtering & ICA
-raw_eeg = my_preprocessing.reject_artefact(raw_eeg, 1, 40, 0)
+raw_eeg = my_preprocessing.reject_artefact(raw_eeg, 1, 40, False, '')
 
 # Browse the raw data
 #raw_eeg.plot()

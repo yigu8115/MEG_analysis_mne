@@ -14,9 +14,9 @@ import numpy as np
 import copy
 
 from mne.preprocessing import find_bad_channels_maxwell
-from autoreject import get_rejection_threshold  # noqa
-from autoreject import Ransac  # noqa
-from autoreject.utils import interpolate_bads  # noqa
+#from autoreject import get_rejection_threshold  # noqa
+#from autoreject import Ransac  # noqa
+#from autoreject.utils import interpolate_bads  # noqa
 from mne.decoding import EMS
 
 import my_preprocessing
@@ -42,6 +42,7 @@ processing_dir = exp_dir + "processing/"
 meg_dir = data_dir + subject_MEG + "/meg/"
 save_dir = processing_dir + "meg/" + subject_MEG + "/"
 epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
+ica_fname = save_dir + subject_MEG + meg_task + "-ica.fif"
 os.system('mkdir -p ' + save_dir) # create the folder if needed
 
 
@@ -70,7 +71,7 @@ raw = mne.io.read_raw_kit(
 )
 
 # Filtering & ICA
-raw = my_preprocessing.reject_artefact(raw, 0.1, 40, 1)
+raw = my_preprocessing.reject_artefact(raw, 0.1, 40, True, ica_fname)
 
 
 #%% === Trigger detection & timing correction === #

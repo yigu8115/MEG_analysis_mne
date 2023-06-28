@@ -33,6 +33,7 @@ figures_dir_meg = processing_dir + 'meg/Figures/' + task + '/' # where to save t
 figures_dir_eeg = processing_dir + 'eeg/Figures/' + task + '/'
 epochs_fname_meg = save_dir_meg + subject_MEG + "_" + task + "-epo.fif"
 epochs_fname_eeg = save_dir_eeg + subject_MEG + "_" + task + "-epo.fif"
+ica_fname_meg = save_dir_meg + subject_MEG + "_" + task + "-ica.fif"
 # create the folders if needed
 os.system('mkdir -p ' + save_dir_meg)
 os.system('mkdir -p ' + save_dir_eeg)
@@ -94,7 +95,8 @@ plt.xlim(100, 200)
 
 
 # Filtering & ICA
-raw = my_preprocessing.reject_artefact(raw, 1, 10, 0)
+raw_clean = my_preprocessing.reject_artefact(raw_clean, 1, 10, False, '')
+#raw_clean = my_preprocessing.reject_artefact(raw_clean, 1, 10, True, ica_fname_meg)
 
 
 #%% === Extract the sections where the participant is purely listening === #
@@ -169,7 +171,7 @@ plt.show()
 
 
 if not os.path.exists(epochs_fname_meg):
-    epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
+    epochs = mne.Epochs(raw_clean, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
 
     conds_we_care_about = ["ba", "da"]
     epochs.equalize_event_counts(conds_we_care_about)
