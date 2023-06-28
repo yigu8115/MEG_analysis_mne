@@ -55,6 +55,8 @@ def reject_artefact(raw, l_freq, h_freq, do_ICA, ica_fname):
             # run ICA
             ica = mne.preprocessing.ICA(n_components=60, max_iter="auto", random_state=97)
             ica.fit(epochs_ICA, tstep=tstep) # 'reject' param here only works for continuous data, so we use drop_bad() above instead
+            
+            ica.save(ica_fname)
         
         # plot ICA results
         ica.plot_sources(raw) # plot IC time series
