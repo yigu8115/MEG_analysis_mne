@@ -8,6 +8,7 @@
 
 import os
 import mne
+import meegkit # for TSPCA
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,12 +30,11 @@ import my_preprocessing
 
 #os.chdir("/Users/mq20096022/Downloads/MD_pilot1/")
 #os.chdir("/Users/mq20096022/Downloads/220112_p003/")
-#os.chdir("/home/jzhu/analysis_mne/data/220112_p003/meg/")
 
 # set up file and folder paths here
-exp_dir = "/home/jzhu/analysis_mne/"
-subject_MEG = 'MMN_test' #'220112_p003' #'FTD0185_MEG1441'
-meg_task = '_TSPCA' #'_1_oddball' #''
+exp_dir = "/mnt/d/Work/analysis_ME197/"
+subject_MEG = '230301_72956_S1' #'220112_p003'
+meg_task = '_oddball' #'_1_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
@@ -69,6 +69,16 @@ raw = mne.io.read_raw_kit(
     allow_unknown_format=False,
     verbose=True,
 )
+
+# Apply TSPCA for noise reduction
+noisy_data = raw.get_data(picks="meg").transpose()
+noisy_ref = raw.get_data(picks=[160,161,162]).transpose()
+data_after_tspca, idx = meegkit.tspca.tsr(noisy_data, noisy_ref)[0:2]
+raw._data[0:160] = data_after_tspca.transpose()
+
+# browse data to identify bad sections & bad channels
+raw.plot()
+
 
 # Filtering & ICA
 raw = my_preprocessing.reject_artefact(raw, 0.1, 40, True, ica_fname)
@@ -232,23 +242,26 @@ events_corrected[:,0] = events[:,0] + 150
 
 #%% === Epoching === #
 
-epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
+if os.path.exists(epochs_fname):
+    epochs_resampled = mne.read_epochs(epochs_fname)
+else:
+    epochs = mne.Epochs(raw, events_corrected, event_id=event_ids, tmin=-0.1, tmax=0.41, preload=True)
 
-#TODO: should we do another autoreject / Ransac here? (so far have only done it
-# on the arbitrary epochs created for ICA)
-# if so, should the rejection threhold be based on only these 2 conditions 
-# of interest, or all epochs?
+    # Should we do another autoreject / Ransac here? (so far have only done it
+    # on the arbitrary epochs created for ICA)
+    # if so, should the rejection threhold be based on only these 2 conditions 
+    # of interest, or all epochs?
 
-conds_we_care_about = ["standard", "deviant"]
-epochs.equalize_event_counts(conds_we_care_about)
+    conds_we_care_about = ["standard", "deviant"]
+    epochs.equalize_event_counts(conds_we_care_about)
 
-# downsample to 100Hz
-print("Original sampling rate:", epochs.info["sfreq"], "Hz")
-epochs_resampled = epochs.copy().resample(100, npad="auto")
-print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
+    # downsample to 100Hz
+    print("Original sampling rate:", epochs.info["sfreq"], "Hz")
+    epochs_resampled = epochs.copy().resample(100, npad="auto")
+    print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
 
-# save for later use (e.g. in Source_analysis script)
-epochs_resampled.save(epochs_fname)
+    # save for later use (e.g. in Source_analysis script)
+    epochs_resampled.save(epochs_fname)
 
 # plot ERFs
 mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
