@@ -22,15 +22,19 @@ def reject_artefact(raw, l_freq, h_freq, do_ICA, ica_fname):
     from autoreject.utils import interpolate_bads  # noqa
     '''
 
+    # do filtering first - so when we display waveforms for ICA comps, it will show filtered data
+    raw.filter(l_freq=l_freq, h_freq=h_freq)
+
+    
     if do_ICA:
 
         # ICA takes a long time - if we've run it before, just load the components
         if op.exists(ica_fname):
             ica = mne.preprocessing.read_ica(ica_fname)
         else:
-            # filtering for ICA
+            # filter again (1Hz high-pass) before ICA
             raw_for_ICA = raw.copy()
-            raw_for_ICA.filter(l_freq=1.0, h_freq=h_freq) # use 1Hz for ICA
+            raw_for_ICA.filter(l_freq=1)
             
             # 'autoreject' requires epoched data
             # here we create arbitrary epochs (making use of all data - useful for short recordings)
@@ -67,15 +71,11 @@ def reject_artefact(raw, l_freq, h_freq, do_ICA, ica_fname):
         ica.exclude = list(map(int, select_comps.split())) # convert to array of ints
         #ica.exclude = [8, 17, 23, 58]
         
-        # can also use automatic methods:
+        # can also use automatic methods to select comps for rejection:
         # https://mne.tools/stable/auto_tutorials/preprocessing/40_artifact_correction_ica.html#using-a-simulated-channel-to-select-ica-components
         # https://github.com/LanceAbel/MQ_MEG_Analysis (selecting channels to simulate EOG)
 
 
-    # filtering
-    raw.filter(l_freq=l_freq, h_freq=h_freq)
-
-    if do_ICA:
         # Compare raw data before & after IC rejection
         raw_orig = copy.deepcopy(raw) # need to make a copy, otherwise the 'before'
             # and 'after' plots become the same (even if you do the 'before' plot
