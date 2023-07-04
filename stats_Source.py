@@ -24,7 +24,7 @@ source_method = "mne"
 #source_method = "beamformer"
 
 # which cond to look at:
-cond = 'ba'
+#cond = 'ba'
 
 # All paths below should be automatic
 processing_dir = op.join(exp_dir, "processing")
@@ -65,6 +65,6 @@ src = mne.read_source_spaces(src_fname)
 fig = stc.plot(src=src, 
     subject=subject, subjects_dir=subjects_dir, verbose=True,
     #mode='glass_brain',
-    initial_time=0.0786)
+    initial_time=0.08)
 
 fig.savefig(op.join(figures_dir, 'GA' + meg_task + run_name + '.png'))
