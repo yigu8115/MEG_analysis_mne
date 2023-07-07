@@ -34,7 +34,7 @@ def reject_artefact(raw, l_freq, h_freq, do_ICA, ica_fname):
         else:
             # filter again (1Hz high-pass) before ICA
             raw_for_ICA = raw.copy()
-            raw_for_ICA.filter(l_freq=1)
+            raw_for_ICA.filter(l_freq=1, h_freq=None)
             
             # 'autoreject' requires epoched data
             # here we create arbitrary epochs (making use of all data - useful for short recordings)
