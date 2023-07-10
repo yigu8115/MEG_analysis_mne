@@ -32,7 +32,7 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME197/"
-subject_MEG = '230301_72956_S1' #'220112_p003'
+subject_MEG = '230426_72956_S2' #'220112_p003'
 meg_tasks = ['_ltp2', '_ltp3'] #'_oddball' #''
 
 # the paths below should be automatic
@@ -194,7 +194,7 @@ for counter, task in enumerate(meg_tasks):
 
     # sanity check - PD triggers occur at 0ms
     mne.viz.plot_evoked(
-        epochs_resampled.average(picks="MISC 010")
+        epochs.average(picks="MISC 010")
     ) 
 
     # downsample to 100Hz
@@ -203,7 +203,18 @@ for counter, task in enumerate(meg_tasks):
     print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
 
     # save the epochs to file
-    epochs.save(epochs_fname)
+    epochs_resampled.save(epochs_fname)
+    
+    # alternatively, save the evoked (i.e. ERF) here instead of epochs.
+    # That will save quite a bit of space. We prob won't need to 
+    # read the actual epochs again as we are not doing source analysis.
+    # Note though: write_evokeds() only accept a list, not a dict, of evokeds,
+    # so when read back in, you won't be able to do evokeds[cond], instead you
+    # need to enumerate the evokeds and find out the cond via evoked.comment
+    evokeds = []
+    for cond in epochs_resampled.event_id:
+        evokeds.append(epochs_resampled[cond].average())    
+    mne.write_evokeds(save_dir + subject_MEG + task + "-ave.fif", evokeds)
 
 
     # plot ERFs
@@ -217,22 +228,6 @@ for counter, task in enumerate(meg_tasks):
     fig[0].savefig(save_dir + subject_MEG + task + ".png")
  
            
-
-# TODO #
-
-# load the saved epochs for ltp1, ltp2 & ltp3
-epochs_all = {} # initialise dict to store the epochs from all blocks
-task_labels = ["pre", "post_2min", "post_30min"] # corresponding to the 3 meg tasks above
-
-
-# calculate difference wave (tetanised minus non-tetanised) for each block
-tetanised = "horizontal" # these need to be set dynamically for each subject
-non-tetanised = "vertical"
-
-# plot 3 lines (one line per block) from this session
-
-
-
 
 # report = mne.Report(title=fname_raw[0])
 # report.add_evokeds(
