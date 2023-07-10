@@ -10,6 +10,14 @@ import mne
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+
+# === Plotting for auditory roving oddball task === #
+
+# plot difference wave (deviant minus standard)
+# 2 lines representing S1 vs S2
+
+
 conds = ["standard", "deviant"]
 
 # load the previously saved epoch files
@@ -30,17 +38,17 @@ S1_GFP = dict()
 S2_GFP = dict()
 times = S1_evoked['standard'].times
 for cond in conds:
+    # How to compute GFP: https://github.com/mne-tools/mne-python/pull/5796
     S1_GFP[cond] = S1_evoked[cond].copy().pick_types(meg=True).data.std(axis=0)
     S2_GFP[cond] = S2_evoked[cond].copy().pick_types(meg=True).data.std(axis=0)
-    S1_GFP[cond] = mne.baseline.rescale(S1_GFP[cond], times, baseline=(None, 0))
-    S2_GFP[cond] = mne.baseline.rescale(S2_GFP[cond], times, baseline=(None, 0))
+    # baseline correct the GFPs? shouldn't need to - baseline correction already applied by default when creating the epochs (verified!)
+    #S1_GFP[cond] = mne.baseline.rescale(S1_GFP[cond], times, baseline=(None, 0))
+    #S2_GFP[cond] = mne.baseline.rescale(S2_GFP[cond], times, baseline=(None, 0))
 
 # deviant GFP minus standard GFP
 S1_diff = np.subtract(S1_GFP['deviant'], S1_GFP['standard'])
 S2_diff = np.subtract(S2_GFP['deviant'], S2_GFP['standard'])
 
-#gfp = np.sum(average.data**2, axis=0)
-#gfp = mne.baseline.rescale(gfp, times, baseline=(None, 0))
 fig, ax = plt.subplots()
 ax.plot(times * 1000, S1_diff * 1e15) # convert time units to ms
 ax.plot(times * 1000, S2_diff * 1e15) # convert amplitude units to fT
@@ -68,3 +76,63 @@ mne.viz.plot_compare_evokeds(
         S2_MMF,
     ]
 )
+
+
+
+
+# === Plotting for visual LTP task === #
+
+# plot difference wave (tetanised minus non-tetanised)
+# each graph has 3 lines representing the 3 task blocks: ltp1, lpt2, ltp3
+# make separate graphs for S1 & S2
+
+
+# specify which subject & session to plot:
+subject_MEG = '230426_72956_S2' #'230301_72956_S1'
+
+#TODO# the mappings below need to be set dynamically for each subject
+tetanised = "horizontal" 
+non_tetanised = "vertical"
+
+
+save_dir = "/mnt/d/Work/analysis_ME197/processing/meg/" + subject_MEG + "/"
+meg_tasks = ['_ltp1', '_ltp2', '_ltp3'] #'_oddball' #''
+task_labels = ["pre", "post_2min", "post_30min"] # corresponding to the 3 meg tasks above
+
+# Loop over blocks (pre, 2min post, 30min post) & read in the saved ERFs
+evokeds = {} # initialise the dict
+for counter, task in enumerate(meg_tasks):
+    evokeds_fname = save_dir + subject_MEG + task + "-ave.fif"
+    evokeds[task_labels[counter]] = mne.read_evokeds(evokeds_fname)
+
+
+# Opt 1: Compute GFP for each cond, then take the diff between conds
+
+GFPs = {}
+GFP_diffs = {}
+
+for counter, task_label in enumerate(task_labels):
+    GFPs[task_label] = {} # declare as a dict again in order to access the next dimension (i.e. cond)
+    for index, evoked in enumerate(evokeds[task_label]):
+        cond = evoked.comment
+        GFPs[task_label][cond] = evoked.copy().pick_types(meg=True).data.std(axis=0)
+        # the evokeds are stored in a list, cannot access by indexing the cond name,
+        # so we convert back to using a dict to store the GFPs
+
+    # calculate difference wave (tetanised minus non-tetanised) within each task
+    GFP_diffs[task_label] = np.subtract(GFPs[task_label][tetanised], GFPs[task_label][non_tetanised])
+
+# plot 3 lines (one line per block) from this session
+fig, ax = plt.subplots()
+times = evokeds['pre'][0].times
+for counter, task_label in enumerate(task_labels):
+    ax.plot(times * 1000, GFP_diffs[task_label] * 1e15) # convert time units to ms, convert amplitude units to fT
+#ax.plot(times * 1000, GFP_diffs['pre'] * 1e15) # convert time units to ms, 
+#ax.plot(times * 1000, GFP_diffs['post_30min'] * 1e15) # convert amplitude units to fT
+ax.axhline(0, linestyle="--", color="grey", linewidth=2) # draw a horizontal line at y=0
+plt.legend(['pre: tenanised - non-tetanised', 
+            '2min post: tenanised - non-tetanised', 
+            '30min post: tenanised - non-tetanised'])
+plt.xlabel("Time (ms)")
+plt.ylabel("fT")
+plt.show()
