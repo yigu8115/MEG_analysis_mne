@@ -33,7 +33,7 @@ import my_preprocessing
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME197/"
 subject_MEG = '230426_72956_S2' #'220112_p003'
-meg_tasks = ['_ltp2', '_ltp3'] #'_oddball' #''
+meg_tasks = ['_ltp1', '_ltp2', '_ltp3'] #'_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
@@ -51,8 +51,10 @@ fname_mrk = glob.glob(meg_dir + "*.mrk")
 for counter, task in enumerate(meg_tasks):
     fname_raw = glob.glob(meg_dir + "*" + task + ".con")
 
-    epochs_fname = save_dir + subject_MEG + task + "-epo.fif"
     ica_fname = save_dir + subject_MEG + task + "-ica.fif"
+    epochs_fname = save_dir + subject_MEG + task + "-epo.fif"
+    ERFs_fname = save_dir + subject_MEG + task + "-ave.fif"
+    ERFs_figure_fname = save_dir + subject_MEG + task + ".png"
 
     raw = mne.io.read_raw_kit(
         fname_raw[0], 
@@ -185,36 +187,39 @@ for counter, task in enumerate(meg_tasks):
 
     #%% === Epoching === #
 
-    epochs = mne.Epochs(
-        raw, events, event_id=event_ids, tmin=-0.1, tmax=0.5, preload=True
-    )
+    if os.path.exists(epochs_fname):
+        epochs_resampled = mne.read_epochs(epochs_fname)
+    else:
+        epochs = mne.Epochs(
+            raw, events, event_id=event_ids, tmin=-0.1, tmax=0.5, preload=True
+        )
 
-    conds_we_care_about = ["horizontal", "vertical"]
-    epochs.equalize_event_counts(conds_we_care_about)
+        conds_we_care_about = ["horizontal", "vertical"]
+        epochs.equalize_event_counts(conds_we_care_about)
 
-    # sanity check - PD triggers occur at 0ms
-    mne.viz.plot_evoked(
-        epochs.average(picks="MISC 010")
-    ) 
+        # sanity check - PD triggers occur at 0ms
+        mne.viz.plot_evoked(
+            epochs.average(picks="MISC 010")
+        ) 
 
-    # downsample to 100Hz
-    print("Original sampling rate:", epochs.info["sfreq"], "Hz")
-    epochs_resampled = epochs.copy().resample(100, npad="auto")
-    print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
+        # downsample to 100Hz
+        print("Original sampling rate:", epochs.info["sfreq"], "Hz")
+        epochs_resampled = epochs.copy().resample(100, npad="auto")
+        print("New sampling rate:", epochs_resampled.info["sfreq"], "Hz")
 
-    # save the epochs to file
-    epochs_resampled.save(epochs_fname)
-    
-    # alternatively, save the evoked (i.e. ERF) here instead of epochs.
-    # That will save quite a bit of space. We prob won't need to 
-    # read the actual epochs again as we are not doing source analysis.
-    # Note though: write_evokeds() only accept a list, not a dict, of evokeds,
-    # so when read back in, you won't be able to do evokeds[cond], instead you
-    # need to enumerate the evokeds and find out the cond via evoked.comment
-    evokeds = []
-    for cond in epochs_resampled.event_id:
-        evokeds.append(epochs_resampled[cond].average())    
-    mne.write_evokeds(save_dir + subject_MEG + task + "-ave.fif", evokeds)
+        # save the epochs to file
+        epochs_resampled.save(epochs_fname)
+        
+        # alternatively, save the evoked (i.e. ERF) here instead of epochs.
+        # That will save quite a bit of space. We prob won't need to 
+        # read the actual epochs again as we are not doing source analysis.
+        # Note though: write_evokeds() only accept a list, not a dict, of evokeds,
+        # so when read back in, you won't be able to do evokeds[cond], instead you
+        # need to enumerate the evokeds and find out the cond via evoked.comment
+        evokeds = []
+        for cond in epochs_resampled.event_id:
+            evokeds.append(epochs_resampled[cond].average())    
+        mne.write_evokeds(ERFs_fname, evokeds)
 
 
     # plot ERFs
@@ -225,7 +230,7 @@ for counter, task in enumerate(meg_tasks):
             epochs_resampled["vertical"].average(),
         ]
     )
-    fig[0].savefig(save_dir + subject_MEG + task + ".png")
+    fig[0].savefig(ERFs_figure_fname)
  
            
 
