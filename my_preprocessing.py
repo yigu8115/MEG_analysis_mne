@@ -16,6 +16,7 @@ def reject_artefact(raw, l_freq, h_freq, do_ICA, ica_fname):
 
     # disable the following imports for now as they are throwing errors 
     # after upgrading to mne v1.3.1
+    # Update 08/09/2023: this seems to be fixed now!
     '''
     from autoreject import get_rejection_threshold  # noqa
     from autoreject import Ransac  # noqa
