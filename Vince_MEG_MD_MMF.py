@@ -33,14 +33,16 @@ import my_preprocessing
 
 # set up file and folder paths here
 exp_dir = "/mnt/d/Work/analysis_ME197/"
-subject_MEG = '230301_72956_S1' #'220112_p003'
-meg_task = '_oddball' #'_1_oddball' #''
+subject_MEG = 'NB' #'230426_72956_S2' #'220112_p003'
+meg_task = '_oddball-24bit_CALM' #'_oddball' #''
 
 # the paths below should be automatic
 data_dir = exp_dir + "data/"
 processing_dir = exp_dir + "processing/"
+results_dir = exp_dir + "results/"
 meg_dir = data_dir + subject_MEG + "/meg/"
 save_dir = processing_dir + "meg/" + subject_MEG + "/"
+figures_dir_meg = results_dir + 'meg/' + 'oddball' + '/Figures/' # where to save the figures for all subjects
 epochs_fname = save_dir + subject_MEG + meg_task + "-epo.fif"
 ica_fname = save_dir + subject_MEG + meg_task + "-ica.fif"
 os.system('mkdir -p ' + save_dir) # create the folder if needed
@@ -180,7 +182,7 @@ print("Number of events from audio channel (166) signal:", stim_tps.shape[0])
 # plot any problematic time period to aid diagnosis
 '''
 test_time = 454368
-span = 1000
+span = 10000
 plt.figure()
 plt.plot(aud_ch_data_raw[0], 'b')
 #plt.plot(outputSignal, 'r')
@@ -264,13 +266,17 @@ else:
     epochs_resampled.save(epochs_fname)
 
 # plot ERFs
-mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
-mne.viz.plot_compare_evokeds(
+#fig0 = mne.viz.plot_evoked(epochs_resampled.average(), gfp="only")
+#fig0.savefig(figures_dir_meg + subject_MEG + '_rms.png')
+fig = epochs_resampled.average().plot(spatial_colors=True, gfp=True)
+fig.savefig(figures_dir_meg + subject_MEG + '_AEF_butterfly.png')
+fig2 = mne.viz.plot_compare_evokeds(
     [
         epochs_resampled["standard"].average(),
         epochs_resampled["deviant"].average(),
     ]
 )
+fig2[0].savefig(figures_dir_meg + subject_MEG + '_AEF_gfp.png')
 
 #############################################################################
 
