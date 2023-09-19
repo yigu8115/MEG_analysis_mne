@@ -260,11 +260,24 @@ raw_eeg.set_channel_types({'32': 'ecg', '63': 'eog'})
 raw_eeg = my_preprocessing.reject_artefact(raw_eeg, 1, 40, False, '')
 
 # Browse the raw data
-#raw_eeg.plot()
+raw_eeg.plot()
+
+
+# Offline rereferencing
+# https://mne.tools/stable/auto_tutorials/preprocessing/55_setting_eeg_reference.html
+
+# add the online reference channel 'FCz' back (all zeros)
+raw_eeg_reref = mne.add_reference_channels(raw_eeg, ref_channels=['64'])
+# use average reference
+raw_eeg_reref.set_eeg_reference(ref_channels="average") # data are modified in-place
+
+# Note: bad channels are not included when computing the average.
+# TODO: to avoid an unbalanced average ref (e.g. when more channels are removed
+# in one hemisphere), we should probably interpolate the bad channels first! 
 
 
 # Find events embedded in data
-eeg_events, _ = mne.events_from_annotations(raw_eeg)
+eeg_events, _ = mne.events_from_annotations(raw_eeg_reref)
 #print(eeg_events[:5])
 
 # remove first 2 triggers (new segment start & one extra trigger sent by PTB script)
@@ -288,7 +301,7 @@ for i in range(len(eeg_events)):
 
 # Epoching
 if not os.path.exists(epochs_fname_eeg):
-    epochs_eeg = mne.Epochs(raw_eeg, eeg_events_corrected, event_id=eeg_event_ids, tmin=-0.1, tmax=0.41, preload=True)
+    epochs_eeg = mne.Epochs(raw_eeg_reref, eeg_events_corrected, event_id=eeg_event_ids, tmin=-0.1, tmax=0.41, preload=True)
 
     conds_we_care_about = ["ba", "da"]
     epochs_eeg.equalize_event_counts(conds_we_care_about)
